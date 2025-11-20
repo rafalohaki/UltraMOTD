@@ -77,6 +77,9 @@ public class UltraMOTD {
     // Constants for Netty pipeline manipulation
     private static final String VELOCITY_HANDLER_NAME = "handler";
 
+    // Netty mode control flag
+    private volatile boolean nettyEnabled = false;
+
     private final AtomicReference<ServerPing.Version> lastVersionInfo = new AtomicReference<>();
     private final AtomicReference<ServerPing.Players> lastPlayersInfo = new AtomicReference<>();
 
@@ -119,8 +122,11 @@ public class UltraMOTD {
             logger.info("PacketPing cache initialized (experimental)");
             
             // Try Netty pipeline injection if enabled
-            if (config.performance().netty().pipelineInjection()) {
+            this.nettyEnabled = config.performance().netty().pipelineInjection();
+            if (nettyEnabled) {
                 tryNettyPipelineInjection();
+            } else {
+                logger.info("UltraMOTD Netty pipeline injection disabled (API mode only)");
             }
             
             // Boot state machine for advanced features (rotation, reloads)
@@ -252,8 +258,7 @@ motd:
   # Zaawansowane rzeczy typu <hover:...> / <click:...> są parsowane, ale nie mają efektu w liście serwerów.
   description: |
     <center><color:#FFD700>■ ■ ■</color> <gradient:#facc15:#f97316:#dc2626><bold>UltraMOTD</bold></gradient> <color:#FFD700>■ ■ ■</color></center>
-    <center><gradient:#7FFF00:#32CD32>High Performance Velocity MOTD Plugin</gradient></center>
-    <center><gradient:#FF6347:#FF1493>MiniMessage · Caching · Java 21 Optimized</gradient></center>
+    <center><gradient:#7FFF00:#32CD32>High Performance Velocity MOTD Plugin · Java 21 Optimized</gradient></center>
   maxPlayers: 100
   enableFavicon: true
   faviconPath: "favicons/default.png"
@@ -288,12 +293,26 @@ cache:
   enableMetrics: false
 
 # ========================================
-# SERIALIZATION SETTINGS
+# PERFORMANCE OPTIMIZATION SETTINGS
 # ========================================
-serialization:
-  descriptionFormat: "MINIMESSAGE"
-  enableFallback: true
-  strictParsing: false
+performance:
+  packetOptimization:
+    preSerialization: true        # Enables packet-level caching for faster ping responses
+    zeroCopyWrite: true           # Uses direct ByteBuf operations for optimal performance
+    batchSize: 64                 # Packet batch processing size
+  netty:
+    pipelineInjection: true       # Enable experimental Netty mode for maximum performance
+                                 # Falls back to API mode automatically if injection fails
+    eventLoopThreads: 0           # 0 = use Netty defaults, >0 = custom thread pool
+    useDirectBuffers: true       # Use direct ByteBuf for better performance
+  allocator:
+    type: "DIRECT_POOLED"         # DIRECT_POOLED for best performance with direct buffers
+    maxCachedBuffers: 1024       # Buffer pool size for high-throughput scenarios
+    bufferSize: 8192             # Default buffer allocation size
+  varint:
+    optimizationEnabled: true     # Optimize VarInt encoding/decoding
+    maxVarintBytes: 5             # Maximum bytes for VarInt (Minecraft protocol limit)
+    cacheVarints: true            # Cache frequently used VarInt values
 """;
 
     /**
@@ -455,6 +474,11 @@ serialization:
                     // Dodaj oryginalny initializer jako handler do pipeline
                     ch.pipeline().addLast("ultramotd-original-init", originalInit);
 
+                    // Dodaj własne handlery tylko jeśli Netty mode nadal włączony
+                    if (!nettyEnabled) {
+                        return;
+                    }
+
                     // Dodaj własne handlery
                     var p = ch.pipeline();
                     try {
@@ -477,6 +501,7 @@ serialization:
 
             logger.info("Injected UltraMOTD Netty handlers via ServerChannelInitializerHolder");
         } catch (Exception t) {
+            nettyEnabled = false;
             logger.error("Failed to inject Netty handler, falling back to API mode", t);
         }
     }
