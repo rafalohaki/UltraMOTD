@@ -3,12 +3,19 @@ package org.rafalohaki.ultramotd;
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyPingEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.util.Favicon;
+import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
-import org.rafalohaki.ultramotd.config.ConfigLoader;
 import org.rafalohaki.ultramotd.config.MOTDConfig;
+import org.rafalohaki.ultramotd.config.UltraConfig;
+import org.rafalohaki.ultramotd.config.UltraYamlConfigLoader;
+import org.rafalohaki.ultramotd.config.ConfigConstants;
+import org.rafalohaki.ultramotd.state.UltraMOTDStateMachine;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,7 +42,9 @@ public class UltraMOTD {
     private final ProxyServer server;
     private final Logger logger;
     private final Path dataDirectory;
-    private MOTDConfig config;
+    private UltraConfig config;
+    private UltraMOTDStateMachine stateMachine;
+    private Favicon favicon;
 
     @Inject
     public UltraMOTD(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -56,65 +65,214 @@ public class UltraMOTD {
             }
 
             // Create config file if it doesn't exist
-            Path configFile = dataDirectory.resolve("config.json");
-            createDefaultConfig(configFile);
+            Path configFile = dataDirectory.resolve("config.yml");
+            createDefaultYamlConfig(configFile);
             
             // Initialize config loader and load configuration
-            ConfigLoader loader = new ConfigLoader(logger);
+            UltraYamlConfigLoader loader = new UltraYamlConfigLoader(logger);
             this.config = loader.loadConfig(configFile);
+            refreshFavicon(this.config.motd());
+            
+            // Boot state machine for advanced features (rotation, reloads, metrics)
+            stateMachine = new UltraMOTDStateMachine(logger, configFile);
+            stateMachine.start();
             
             logger.info("UltraMOTD initialized successfully!");
-            logger.info("MOTD Description: {}", config.description());
-            logger.info("Max Players: {}", config.maxPlayers());
-            logger.info("Favicon Enabled: {}", config.enableFavicon());
-            logger.info("Virtual Threads Enabled: {}", config.enableVirtualThreads());
+            logger.info("MOTD Description: {}", config.motd().description());
+            logger.info("Max Players: {}", config.motd().maxPlayers());
+            logger.info("Favicon Enabled: {}", config.motd().enableFavicon());
+            logger.info("Virtual Threads Enabled: {}", config.motd().enableVirtualThreads());
             
         } catch (Exception e) {
             logger.error("Failed to initialize UltraMOTD: {}", e.getMessage(), e);
         }
     }
 
+    @Subscribe
+    public void onProxyShutdown(ProxyShutdownEvent event) {
+        if (stateMachine != null && stateMachine.isRunning()) {
+            stateMachine.stop();
+        }
+    }
+
+    @Subscribe
+    public void onProxyPing(ProxyPingEvent event) {
+        MOTDConfig activeMOTD = getActiveMOTDConfig();
+        Component description = activeMOTD != null
+                ? activeMOTD.description()
+                : Component.text(ConfigConstants.DEFAULT_MOTD_TEXT);
+        
+        // Calculate dynamic player count if enabled
+        int maxPlayers = calculateMaxPlayers(activeMOTD);
+
+        var builder = event.getPing().asBuilder()
+                .description(description)
+                .maximumPlayers(maxPlayers);
+
+        if (favicon != null && activeMOTD != null && activeMOTD.enableFavicon()) {
+            builder.favicon(favicon);
+        }
+
+        event.setPing(builder.build());
+    }
+
     /**
-     * Creates default config file if it doesn't exist
+     * Creates default YAML config file if it doesn't exist
      */
-    private void createDefaultConfig(Path configFile) {
+    private void createDefaultYamlConfig(Path configFile) {
         if (!Files.exists(configFile)) {
             try {
-                // Create default config content
-                String defaultConfig = getDefaultConfigContent();
-                Files.writeString(configFile, defaultConfig);
-                logger.info("Created default config file: {}", configFile);
+                String defaultYamlConfig = getDefaultYamlConfigContent();
+                Files.writeString(configFile, defaultYamlConfig);
+                logger.info("Created default YAML config file: {}", configFile);
             } catch (IOException e) {
-                logger.error("Failed to create default config file: {}", e.getMessage(), e);
+                logger.error("Failed to create default YAML config file: {}", e.getMessage(), e);
             }
         }
     }
 
     /**
-     * Default configuration content as JSON
+     * Default configuration content as YAML with improved readability
      */
-    private static final String DEFAULT_CONFIG_CONTENT = """
-            {
-              "description": "<green>UltraMOTD <gray>- <blue>High Performance MOTD</blue></gray>",
-              "maxPlayers": 100,
-              "enableFavicon": true,
-              "faviconPath": "favicons/default.png",
-              "enableVirtualThreads": true
-            }
-            """;
+    private static final String DEFAULT_YAML_CONFIG_CONTENT = """
+# UltraMOTD Configuration - YAML Format
+# High Performance MOTD Plugin for Velocity Proxy
+
+# Main MOTD settings
+motd:
+  description: "<green>UltraMOTD <gray>- <blue>High Performance MOTD</blue></gray>"
+  maxPlayers: 100
+  enableFavicon: true
+  faviconPath: "favicons/default.png"
+  enableVirtualThreads: true
+
+# Player count manipulation
+playerCount:
+  enabled: false
+  updateRate:
+    intervalMs: 3000
+    smoothUpdates: true
+  maxCountType: "ADD_SOME"  # Options: VARIABLE, ADD_SOME, MULTIPLY, FIXED
+  maxCount: 1
+  showRealPlayers: true
+
+# Performance optimization settings
+performance:
+  packetOptimization:
+    preSerialization: true
+    zeroCopyWrite: true
+    batchSize: 64
+  netty:
+    pipelineInjection: true
+    eventLoopThreads: 0  # 0 = auto-detect
+    useDirectBuffers: true
+  allocator:
+    type: "DIRECT_POOLED"  # Options: UNPOOLED, POOLED, DIRECT_POOLED
+    maxCachedBuffers: 1024
+    bufferSize: 8192
+  varint:
+    optimizationEnabled: true
+    maxVarintBytes: 5
+    cacheVarints: true
+
+# Caching strategies
+cache:
+  favicon:
+    enabled: true
+    maxAgeMs: 300000  # 5 minutes
+    maxCacheSize: 10
+    preloadFavicons: false
+  json:
+    enabled: true
+    maxAgeMs: 60000   # 1 minute
+    maxCacheSize: 100
+    compressCache: false
+  enableMetrics: true
+
+# Serialization format options
+serialization:
+  descriptionFormat: "MINIMESSAGE"  # Options: MINIMESSAGE, LEGACY, JSON, AUTO
+  enableFallback: true
+  strictParsing: false
+
+# Java 21 specific features
+java21:
+  enableVirtualThreads: true
+  enablePreviewFeatures: false
+  enableRecordPatterns: true
+  enableStringTemplates: false
+""";
 
     /**
-     * Returns default configuration content as JSON
+     * Returns default configuration content as YAML
      */
-    private String getDefaultConfigContent() {
-        return DEFAULT_CONFIG_CONTENT;
+    private String getDefaultYamlConfigContent() {
+        return DEFAULT_YAML_CONFIG_CONTENT;
+    }
+
+    private MOTDConfig getActiveMOTDConfig() {
+        if (stateMachine != null && stateMachine.isRunning()) {
+            MOTDConfig current = stateMachine.getCurrentConfig();
+            if (current != null) {
+                return current;
+            }
+        }
+        return config.motd();
+    }
+
+    private int calculateMaxPlayers(MOTDConfig baseConfig) {
+        if (!config.playerCount().enabled() || baseConfig == null) {
+            return baseConfig != null ? baseConfig.maxPlayers() : 100;
+        }
+
+        int realPlayers = server.getPlayerCount();
+        int addCount = config.playerCount().maxCount();
+
+        return switch (config.playerCount().maxCountType()) {
+            case VARIABLE -> addCount;
+            case ADD_SOME -> realPlayers + addCount;
+            case MULTIPLY -> realPlayers * addCount;
+            case FIXED -> addCount;
+        };
+    }
+
+    private void refreshFavicon(MOTDConfig targetConfig) {
+        if (targetConfig == null || !targetConfig.enableFavicon()) {
+            this.favicon = null;
+            return;
+        }
+
+        Path faviconPath = resolveFaviconPath(targetConfig.faviconPath());
+        if (!Files.exists(faviconPath)) {
+            logger.warn("Favicon path {} does not exist", faviconPath);
+            this.favicon = null;
+            return;
+        }
+
+        try {
+            this.favicon = Favicon.create(faviconPath);
+            logger.info("Loaded favicon from {}", faviconPath);
+        } catch (IOException e) {
+            logger.error("Failed to load favicon from {}: {}", faviconPath, e.getMessage());
+            this.favicon = null;
+        }
+    }
+
+    private Path resolveFaviconPath(String configuredPath) {
+        Path path = Path.of(configuredPath);
+        if (path.isAbsolute()) {
+            return path;
+        }
+
+        Path serverRoot = Path.of("").toAbsolutePath();
+        return serverRoot.resolve(configuredPath).normalize();
     }
 
     /**
      * Gets current MOTD configuration
      */
     public MOTDConfig getConfig() {
-        return config;
+        return config.motd();
     }
 
     /**

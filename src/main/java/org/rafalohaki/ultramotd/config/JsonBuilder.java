@@ -1,41 +1,38 @@
 package org.rafalohaki.ultramotd.config;
 
 /**
- * JSON builder using Java 21 string templates for optimized JSON generation.
- * Provides faster JSON building compared to traditional String.format.
+ * JSON builder using String.format for optimized JSON generation.
+ * Provides reliable JSON building without requiring preview features.
  */
 public class JsonBuilder {
 
     /**
-     * Builds status response JSON using string templates (preview feature).
-     * Faster than String.format for JSON building with multiple variables.
-     * <p>
-     * Note: Requires --enable-preview flag for Java 21 string templates
+     * Builds status response JSON using String.format.
+     * Compatible with all Java versions without preview features.
      */
     public String buildStatusJson(String versionName, int protocol, int online, int max, String description) {
-        // String template (preview) - faster than String.format
-        return STR."""
+        return String.format("""
             {
-              "version": {"name": "\{versionName}", "protocol": \{protocol}},
-              "players": {"max": \{max}, "online": \{online}, "sample": []},
-              "description": {"text": "\{description}"}
+              "version": {"name": "%s", "protocol": %d},
+              "players": {"max": %d, "online": %d, "sample": []},
+              "description": {"text": "%s"}
             }
-            """;
+            """, versionName, protocol, max, online, description);
     }
 
     /**
-     * Builds status JSON with favicon using string templates.
+     * Builds status JSON with favicon using String.format.
      */
     public String buildStatusJsonWithFavicon(String versionName, int protocol, int online, int max,
                                              String description, String faviconBase64) {
-        return STR."""
+        return String.format("""
             {
-              "version": {"name": "\{versionName}", "protocol": \{protocol}},
-              "players": {"max": \{max}, "online": \{online}, "sample": []},
-              "description": {"text": "\{description}"},
-              "favicon": "\{faviconBase64}"
+              "version": {"name": "%s", "protocol": %d},
+              "players": {"max": %d, "online": %d, "sample": []},
+              "description": {"text": "%s"},
+              "favicon": "%s"
             }
-            """;
+            """, versionName, protocol, max, online, description, faviconBase64);
     }
 
     /**

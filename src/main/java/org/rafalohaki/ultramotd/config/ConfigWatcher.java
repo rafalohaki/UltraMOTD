@@ -43,7 +43,8 @@ public class ConfigWatcher {
             return new ConfigWatcher(logger, reloadCallback);
         } catch (IOException e) {
             logger.error("Failed to create ConfigWatcher: {}", e.getMessage(), e);
-            throw new UltraMOTDConfigException("Cannot initialize configuration watcher", e);
+            throw new UltraMOTDConfigException(
+                    String.format("Cannot initialize configuration watcher for callback %s", reloadCallback), e);
         }
     }
 

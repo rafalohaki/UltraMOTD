@@ -10,7 +10,7 @@ import java.nio.file.Path;
 /**
  * Test to verify config creation functionality
  */
-public class ConfigCreationTest {
+class ConfigCreationTest {
 
     @Test
     void testConfigFileCreation(@TempDir Path tempDir) throws Exception {

@@ -1,9 +1,10 @@
 package org.rafalohaki.ultramotd.state;
 
 import net.kyori.adventure.text.Component;
-import org.rafalohaki.ultramotd.config.ConfigLoader;
 import org.rafalohaki.ultramotd.config.ConfigWatcher;
 import org.rafalohaki.ultramotd.config.MOTDConfig;
+import org.rafalohaki.ultramotd.config.UltraConfig;
+import org.rafalohaki.ultramotd.config.UltraYamlConfigLoader;
 import org.rafalohaki.ultramotd.metrics.UltraMOTDMetrics;
 import org.rafalohaki.ultramotd.rotation.MOTDRotator;
 import org.slf4j.Logger;
@@ -25,7 +26,7 @@ public class UltraMOTDStateMachine {
     private final Logger logger;
     private final Path configPath;
     private final UltraMOTDMetrics metrics;
-    private final ConfigLoader configLoader;
+    private final UltraYamlConfigLoader configLoader;
     private final ConfigWatcher configWatcher;
     private final ScheduledExecutorService scheduler;
 
@@ -38,7 +39,7 @@ public class UltraMOTDStateMachine {
         this.logger = logger;
         this.configPath = configPath;
         this.metrics = new UltraMOTDMetrics();
-        this.configLoader = new ConfigLoader(logger);
+        this.configLoader = new UltraYamlConfigLoader(logger);
         this.configWatcher = ConfigWatcher.createUltraMOTDWatcher(logger, this::handleConfigReload);
         this.currentConfig = new AtomicReference<>();
         this.rotator = new AtomicReference<>();
@@ -60,7 +61,8 @@ public class UltraMOTDStateMachine {
 
         try {
             // Load initial configuration
-            MOTDConfig initialConfig = configLoader.loadConfig(configPath);
+            UltraConfig ultraConfig = configLoader.loadConfig(configPath);
+            MOTDConfig initialConfig = ultraConfig.motd();
             currentConfig.set(initialConfig);
             logger.info("Initial configuration loaded: {}", initialConfig);
 
@@ -78,7 +80,8 @@ public class UltraMOTDStateMachine {
 
         } catch (Exception e) {
             logger.error("Failed to start UltraMOTD state machine: {}", e.getMessage(), e);
-            throw new UltraMOTDStateException("State machine startup failed", e);
+            throw new UltraMOTDStateException(
+                    String.format("State machine startup failed for config path: %s", configPath), e);
         }
     }
 
@@ -123,7 +126,7 @@ public class UltraMOTDStateMachine {
             metrics.recordResponseTime(System.nanoTime() - startTime);
             return motd;
         } catch (Exception e) {
-            logger.error("Error getting current MOTD: {}", e.getMessage());
+            logger.error("Error getting current MOTD from rotator: {}", e.getMessage(), e);
             metrics.recordResponseTime(System.nanoTime() - startTime);
             return Component.text("§aUltraMOTD §7- §bHigh Performance MOTD");
         }
@@ -210,7 +213,8 @@ public class UltraMOTDStateMachine {
         long startTime = System.nanoTime();
 
         try {
-            MOTDConfig newConfig = configLoader.loadConfig(configPath);
+            UltraConfig newUltraConfig = configLoader.loadConfig(configPath);
+            MOTDConfig newConfig = newUltraConfig.motd();
             MOTDConfig oldConfig = currentConfig.get();
 
             if (!newConfig.equals(oldConfig)) {
@@ -229,7 +233,9 @@ public class UltraMOTDStateMachine {
             metrics.recordConfigReload(System.nanoTime() - startTime);
 
         } catch (Exception e) {
-            logger.error("Failed to reload configuration: {}", e.getMessage(), e);
+            logger.error("Failed to reload configuration from {}: {}", configPath, e.getMessage(), e);
+            throw new UltraMOTDStateException(
+                    String.format("Configuration reload failed for file: %s", configPath), e);
         }
     }
 
@@ -254,7 +260,8 @@ public class UltraMOTDStateMachine {
                     isRunning, getMOTDCount(), getCurrentRotationIndex());
 
         } catch (Exception e) {
-            logger.error("Health check failed: {}", e.getMessage(), e);
+            logger.error("Health check failed for UltraMOTD state machine: {}", e.getMessage(), e);
+            // Health check failures are non-critical, so we log and continue
         }
     }
 
