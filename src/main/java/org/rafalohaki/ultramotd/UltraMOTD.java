@@ -30,7 +30,14 @@ import java.nio.file.Path;
  * - Zero-cost config deserialization using Java 21 record patterns
  * - Virtual threads support for async operations
  * - Config hot-reloading with file watching
- * - High-performance caching with TTL and size limits
+ * - High-performance favicon caching with TTL and size limits
+ * - Optimized for high-traffic servers with frequent ping requests
+ * 
+ * Performance Optimizations:
+ * ✅ Favicon caching - Eliminates repeated disk I/O for server-icon.png
+ * ✅ Java 21 features - Virtual threads, record patterns, optimized operations
+ * ⚠️ JSON caching - Not applicable due to Velocity's ProxyPingEvent API limitations
+ * ⚠️ Netty optimizations - Not applicable due to Velocity's internal abstraction layer
  */
 @Plugin(
     id = "ultramotd",
@@ -171,9 +178,10 @@ public class UltraMOTD {
 # ========================================
 motd:
   # Multi-line MOTD support - use \\n for line breaks in MiniMessage format
+  # Supports: gradients, hex colors, unicode, bold/italic, and all Adventure formatting
   description: |
-    <green>UltraMOTD <gray>- <blue>High Performance MOTD</blue></gray>
-    <gold>Welcome to our server! <gray>• <aqua>Custom plugins</gray> • <green>Active community</green>
+    <color:#FFD700>■</color> <gradient:#39FF14:#00cc00><bold>ANARCHIA POLSKA</bold></gradient> <color:#FFD700>■</color> <gradient:#FFD700:#FFA500>Od 2019 roku</gradient>
+    <gradient:#7FFF00:#32CD32><bold>2b2t.pl</bold></gradient> <red>⚡</red> <gradient:#FF6347:#FF1493>1.18 <white>↔</white> 1.21+</gradient> <red>⚡</red> <gradient:#D87093:#DA70D6><italic>Jedna Mapa, Tysiące Historii</italic></gradient>
   maxPlayers: 100
   enableFavicon: true
   faviconPath: "favicons/default.png"
@@ -310,6 +318,10 @@ serialization:
     /**
      * Initializes performance optimization components.
      * Configures caching systems based on configuration.
+     * 
+     * Note: Due to Velocity's API limitations, only favicon caching and Java 21 features
+     * can be fully utilized. JSON caching and Netty optimizations are configured
+     * but not applicable to ProxyPingEvent responses.
      */
     private void initializePerformanceComponents() {
         // Initialize favicon cache
