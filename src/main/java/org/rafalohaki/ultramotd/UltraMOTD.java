@@ -71,7 +71,7 @@ public class UltraMOTD {
             }
 
             // Create config file if it doesn't exist
-            Path configFile = dataDirectory.resolve("config.yml");
+            Path configFile = dataDirectory.resolve(ConfigConstants.CONFIG_FILENAME);
             createDefaultYamlConfig(configFile);
             
             // Initialize config loader and load configuration
@@ -163,24 +163,8 @@ public class UltraMOTD {
      * Default configuration content as YAML with improved readability
      */
     private static final String DEFAULT_YAML_CONFIG_CONTENT = """
-# UltraMOTD Configuration - Enhanced with multi-line MOTD and SEO features
+# UltraMOTD Configuration - High Performance MOTD Plugin
 # Documentation: https://github.com/rafalohaki/ultramotd/wiki
-
-# ========================================
-# SERVER INFORMATION & SEO SETTINGS
-# ========================================
-server:
-  name: "UltraMOTD Server"
-  description: "High-performance Minecraft server with advanced MOTD system"
-  website: "https://example.com"
-  discord: "https://discord.gg/example"
-  region: "EU"  # Options: EU, US, ASIA, OCE, etc.
-  tags:
-    - "minecraft"
-    - "survival"
-    - "pvp"
-    - "economy"
-  language: "en"
 
 # ========================================
 # MOTD DISPLAY SETTINGS
@@ -208,99 +192,28 @@ playerCount:
   showRealPlayers: true
 
 # ========================================
-# NETWORK & SECURITY SETTINGS
-# ========================================
-network:
-  # IP Management with deduplication
-  ipManagement:
-    enableWhitelist: false
-    whitelist: []
-    enableBlacklist: false
-    blacklist: []
-    enableDeduplication: true  # Prevent duplicate IP connections
-    logDuplicates: false
-  enableIPLogging: false
-  enableGeoBlocking: false
-  allowedCountries: []  # Empty = allow all countries
-
-# ========================================
-# PERFORMANCE OPTIMIZATION
-# ========================================
-performance:
-  packetOptimization:
-    preSerialization: true
-    zeroCopyWrite: true
-    batchSize: 64
-  netty:
-    pipelineInjection: true
-    eventLoopThreads: 0  # 0 = auto-detect
-    useDirectBuffers: true
-  allocator:
-    type: "DIRECT_POOLED"  # Options: UNPOOLED, POOLED, DIRECT_POOLED
-    maxCachedBuffers: 1024
-    bufferSize: 8192
-  varint:
-    optimizationEnabled: true
-    maxVarintBytes: 5
-    cacheVarints: true
-
-# ========================================
-# CACHING STRATEGIES
+# CACHING SETTINGS
 # ========================================
 cache:
   favicon:
     enabled: true
-    maxAgeMs: 300000  # 5 minutes
+    maxAgeMs: 300000
     maxCacheSize: 10
     preloadFavicons: false
   json:
     enabled: true
-    maxAgeMs: 60000   # 1 minute
+    maxAgeMs: 60000
     maxCacheSize: 100
     compressCache: false
-  enableMetrics: true
+  enableMetrics: false
 
 # ========================================
-# SERIALIZATION FORMAT
+# SERIALIZATION SETTINGS
 # ========================================
 serialization:
-  descriptionFormat: "MINIMESSAGE"  # Options: MINIMESSAGE, LEGACY, JSON, AUTO
+  descriptionFormat: "MINIMESSAGE"
   enableFallback: true
   strictParsing: false
-
-# ========================================
-# JAVA 21 SPECIFIC FEATURES
-# ========================================
-java21:
-  enableVirtualThreads: true
-  enablePreviewFeatures: false
-  enableRecordPatterns: true
-  enableStringTemplates: false
-
-# ========================================
-# EXAMPLES & NOTES
-# ========================================
-# Multi-line MOTD Examples:
-# 1. Using YAML literal block (|):
-#    description: |
-#      <green>Line 1
-#      <blue>Line 2
-#
-# 2. Using explicit line breaks:
-#    description: "<green>Line 1\\n<blue>Line 2"
-#
-# 3. Adventure Component format:
-#    description: '{"text":"Line 1\\nLine 2","color":"green"}'
-#
-# IP Management Examples:
-# whitelist:
-#   - "192.168.1.100"
-#   - "10.0.0.50"
-# blacklist:
-#   - "192.168.1.200"
-#
-# SEO Tags help your server appear in server lists
-# Region helps players find servers in their geographic area
 """;
 
     /**
@@ -364,8 +277,13 @@ java21:
             return path;
         }
 
-        Path serverRoot = Path.of("").toAbsolutePath();
-        return serverRoot.resolve(configuredPath).normalize();
+        // Special case: server-icon.png should be in server root directory
+        if (ConfigConstants.SERVER_ICON_FILENAME.equals(configuredPath)) {
+            return Path.of("").toAbsolutePath().resolve(configuredPath).normalize();
+        }
+
+        // Use plugin data directory for other relative paths (custom favicons)
+        return dataDirectory.resolve(configuredPath).normalize();
     }
 
     /**
@@ -427,7 +345,9 @@ java21:
     private Favicon getCachedFavicon(MOTDConfig motdConfig) {
         if (faviconCache != null && motdConfig.faviconPath() != null) {
             try {
-                FaviconCache.CachedFavicon cached = faviconCache.getFavicon(motdConfig.faviconPath(), dataDirectory);
+                // Resolve the favicon path first to handle server-icon.png correctly
+                Path resolvedFaviconPath = resolveFaviconPath(motdConfig.faviconPath());
+                FaviconCache.CachedFavicon cached = faviconCache.getFavicon(resolvedFaviconPath.toString(), dataDirectory);
                 if (cached != null) {
                     return cached.favicon();
                 }

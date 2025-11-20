@@ -72,6 +72,12 @@ public final class ConfigConstants {
     public static final int DEFAULT_MAX_PLAYERS = 100;
     public static final long DEFAULT_UPDATE_RATE_MS = 3000;
     
+    // File paths and identifiers
+    public static final String CONFIG_FILENAME = "config.yml";
+    public static final String SERVER_ICON_FILENAME = "server-icon.png";
+    public static final String PLUGIN_DATA_PATH = "plugins/ultramotd";
+    public static final String FAVICONS_FOLDER = "favicons/";
+    
     private ConfigConstants() {
         // Utility class
     }

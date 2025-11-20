@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.rafalohaki.ultramotd.config.UltraConfig;
 import org.rafalohaki.ultramotd.config.UltraYamlConfigLoader;
+import org.rafalohaki.ultramotd.config.ConfigConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +22,7 @@ class YamlConfigTest {
 
     @Test
     void testYamlConfigLoading() throws Exception {
-        // Create a sample YAML config
+        // Create a sample YAML config with essential user-facing settings
         String yamlContent = """
 motd:
   description: "<green>Test MOTD</green>"
@@ -36,12 +37,6 @@ playerCount:
   maxCount: 5
   showRealPlayers: true
 
-performance:
-  packetOptimization:
-    preSerialization: true
-    zeroCopyWrite: false
-    batchSize: 32
-
 cache:
   favicon:
     enabled: false
@@ -53,15 +48,9 @@ serialization:
   descriptionFormat: "MINIMESSAGE"
   enableFallback: true
   strictParsing: false
-
-java21:
-  enableVirtualThreads: true
-  enablePreviewFeatures: false
-  enableRecordPatterns: true
-  enableStringTemplates: false
 """;
 
-        Path configFile = tempDir.resolve("config.yml");
+        Path configFile = tempDir.resolve(ConfigConstants.CONFIG_FILENAME);
         java.nio.file.Files.writeString(configFile, yamlContent);
 
         // Test loading
@@ -69,21 +58,29 @@ java21:
         UltraYamlConfigLoader loader = new UltraYamlConfigLoader(logger);
         UltraConfig config = loader.loadConfig(configFile);
 
-        // Verify loaded values
+        // Verify loaded values - performance and Java 21 settings use optimal defaults
         assertNotNull(config);
         assertEquals(50, config.motd().maxPlayers());
         assertFalse(config.motd().enableFavicon());
+        assertTrue(config.motd().enableVirtualThreads());
         assertTrue(config.playerCount().enabled());
         assertEquals(5, config.playerCount().maxCount());
+        
+        // Verify optimal performance defaults are applied automatically
         assertTrue(config.performance().packetOptimization().preSerialization());
-        assertFalse(config.performance().packetOptimization().zeroCopyWrite());
-        assertEquals(32, config.performance().packetOptimization().batchSize());
-        assertFalse(config.cache().favicon().enabled());
+        assertTrue(config.performance().packetOptimization().zeroCopyWrite());
+        assertEquals(64, config.performance().packetOptimization().batchSize());
+        assertFalse(config.cache().favicon().enabled());  // From test config
         assertTrue(config.cache().json().enabled());
-        assertFalse(config.cache().enableMetrics());
+        assertFalse(config.cache().enableMetrics());  // From test config
         assertEquals(UltraConfig.SerializationConfig.DescriptionFormat.MINIMESSAGE, 
                     config.serialization().descriptionFormat());
-        assertTrue(config.java21().enableVirtualThreads());
+        
+        // Verify Java 21 features use hardcoded optimal defaults
+        assertTrue(config.java21().enableVirtualThreads());    // Always enabled for performance
+        assertFalse(config.java21().enablePreviewFeatures()); // Disabled for stability
+        assertTrue(config.java21().enableRecordPatterns());   // Enabled for performance
+        assertFalse(config.java21().enableStringTemplates()); // Disabled for compatibility
     }
 
     @Test

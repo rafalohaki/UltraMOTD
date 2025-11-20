@@ -10,9 +10,7 @@ public record UltraConfig(
     PerformanceConfig performance,
     CacheConfig cache,
     SerializationConfig serialization,
-    Java21Config java21,
-    ServerConfig server,
-    NetworkConfig network
+    Java21Config java21
 ) {
 
     /**
@@ -364,9 +362,7 @@ public record UltraConfig(
             PerformanceConfig.getDefault(),
             CacheConfig.getDefault(),
             SerializationConfig.getDefault(),
-            Java21Config.getDefault(),
-            ServerConfig.getDefault(),
-            NetworkConfig.getDefault()
+            Java21Config.getDefault()
         );
     }
 
