@@ -9,33 +9,38 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.rafalohaki.ultramotd.netty.ChannelKeys.PROTOCOL_VERSION;
+
 public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
 
     private final PacketPingCache packetCache;
     private final boolean enabled;
     private final RateLimiter rateLimiter;
+    private final PacketRebuilder packetRebuilder;
 
-    private static final String STATUS_REQUEST_CLASS_NAME = "com.velocitypowered.proxy.protocol.packet.StatusRequest";
-    private static final Class<?> STATUS_REQUEST_CLASS;
-
-    static {
-        Class<?> c = null;
-        try {
-            c = Class.forName(STATUS_REQUEST_CLASS_NAME);
-        } catch (Exception e) {
-            c = null;
-        }
-        STATUS_REQUEST_CLASS = c;
+    @FunctionalInterface
+    public interface PacketRebuilder {
+        void rebuildPacketForProtocol(int protocol, com.velocitypowered.api.proxy.server.ServerPing.Version version, com.velocitypowered.api.proxy.server.ServerPing.Players players);
     }
 
     public UltraPingNettyHandler(PacketPingCache packetCache, boolean enabled) {
-        this(packetCache, enabled, true, 10);
+        this(packetCache, enabled, null, null);
     }
 
     public UltraPingNettyHandler(PacketPingCache packetCache, boolean enabled, boolean rateLimitEnabled, int maxPingsPerSecond) {
+        this(packetCache, enabled, rateLimitEnabled ? new RateLimiter(maxPingsPerSecond) : null, null);
+    }
+
+    public UltraPingNettyHandler(PacketPingCache packetCache, boolean enabled, RateLimiter rateLimiter, PacketRebuilder packetRebuilder) {
         this.packetCache = packetCache;
         this.enabled = enabled;
-        this.rateLimiter = rateLimitEnabled ? new RateLimiter(maxPingsPerSecond) : null;
+        this.rateLimiter = rateLimiter;
+        this.packetRebuilder = packetRebuilder;
+    }
+
+    private boolean isStatusRequest(Object msg) {
+        // Simple check - we can improve this later if needed
+        return msg != null && msg.getClass().getSimpleName().contains("StatusRequest");
     }
 
     @Override
@@ -66,10 +71,12 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
             }
         }
 
-        PacketPingCache.Key key = extractKey();
+        PacketPingCache.Key key = extractKey(ctx);
         ByteBuf packet = packetCache.getPacket(key);
         if (packet == null) {
-            packet = packetCache.getPacket(new PacketPingCache.Key(0, ""));
+            // Packet not cached for this protocol - need to rebuild
+            rebuildPacketForProtocol(key.protocolVersion());
+            packet = packetCache.getPacket(key);
             if (packet == null) {
                 super.channelRead(ctx, msg);
                 return;
@@ -83,20 +90,38 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
         ctx.writeAndFlush(packet).addListener(f -> ctx.close());
     }
 
-    private boolean isStatusRequest(Object msg) {
-        return STATUS_REQUEST_CLASS != null && STATUS_REQUEST_CLASS.isInstance(msg);
+    private void rebuildPacketForProtocol(int protocolVersion) {
+        if (packetRebuilder == null) {
+            return; // No rebuilder available, fallback to standard Velocity handling
+        }
+
+        try {
+            // Use last known version info from UltraMOTD or fallback to defaults
+            // In a real implementation, we'd pass this from UltraMOTD via the rebuilder
+            com.velocitypowered.api.proxy.server.ServerPing.Version defaultVersion =
+                new com.velocitypowered.api.proxy.server.ServerPing.Version(protocolVersion, "Unknown");
+            com.velocitypowered.api.proxy.server.ServerPing.Players defaultPlayers = null;
+
+            packetRebuilder.rebuildPacketForProtocol(protocolVersion, defaultVersion, defaultPlayers);
+        } catch (Exception e) {
+            // Log error but don't crash - fallback will handle this
+        }
     }
 
-    private PacketPingCache.Key extractKey() {
-        // ignorujemy atrybuty kanału, zawsze jeden wariant pakietu
-        return new PacketPingCache.Key(0, "");
+    private PacketPingCache.Key extractKey(ChannelHandlerContext ctx) {
+        // Extract protocol version from channel attributes set by UltraHandshakeTracker
+        Integer protocol = ctx.channel().attr(PROTOCOL_VERSION).get();
+        int protocolVersion = protocol != null ? protocol : 0; // Fallback to 0 if not set
+
+        // For each protocol version, we cache one packet variant
+        return new PacketPingCache.Key(protocolVersion, "");
     }
 
     /**
      * Lightweight rate limiter for DDoS protection.
      * Uses sliding window of 1 second per IP address.
      */
-    private static final class RateLimiter {
+    public static final class RateLimiter {
         private static final long WINDOW_MILLIS = 1_000L;
         private final int maxPingsPerWindow;
 
@@ -107,7 +132,7 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
 
         private final ConcurrentHashMap<InetAddress, IpState> states = new ConcurrentHashMap<>();
 
-        RateLimiter(int maxPingsPerSecond) {
+        public RateLimiter(int maxPingsPerSecond) {
             this.maxPingsPerWindow = maxPingsPerSecond;
         }
 

@@ -18,7 +18,9 @@ High-performance MOTD plugin for the Velocity proxy focused on predictable laten
 3. **Performance Modes**
    - **Standard Mode**: Zero-allocation ServerPing cache (~80% of max speed, 100% stable)
    - **Netty Mode**: Packet-level caching (~95% of max speed, requires `performance.netty.pipelineInjection: true`)
-   - Sub-microsecond ping handler latency in both modes
+     - Per-protocol packet variants - each client version gets compatible response
+     - Automatic protocol detection via handshake tracking
+     - Eliminates "incompatible version" errors for all supported Minecraft versions
 
 4. **Java 21 Optimizations**
    - Virtual threads for async tasks

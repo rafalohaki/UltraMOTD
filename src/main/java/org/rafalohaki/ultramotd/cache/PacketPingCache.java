@@ -51,8 +51,8 @@ public final class PacketPingCache {
      * Builds and caches a complete status response packet for given parameters.
      * Call this whenever active MOTD changes (reload/rotation).
      * 
-     * Packet format:
-     * [packetLength VarInt][packetId=0x00 VarInt][jsonLength VarInt][JSON UTF-8]
+     * Packet format (without outer length - Velocity encoder adds it):
+     * [packetId=0x00 VarInt][jsonLength VarInt][JSON UTF-8]
      */
     public void updatePacket(Key key, ServerPing ping) {
         Objects.requireNonNull(key, "key");
@@ -62,16 +62,14 @@ public final class PacketPingCache {
         String json = ServerPingSerializer.toJson(ping);
         byte[] jsonBytes = json.getBytes(StandardCharsets.UTF_8);
 
-        // 2. Calculate packet size: VarInt(len(packetId + json)), packetId(=0), VarInt(lenJSON), JSON bytes
+        // 2. Calculate packet size: packetId(=0), VarInt(lenJSON), JSON bytes
+        // NO outer packetLength VarInt - Velocity's MinecraftVarintLengthEncoder adds it
         int jsonLen = jsonBytes.length;
-        int bodyLen = 1 + VarInts.sizeOf(jsonLen) + jsonLen; // packetId + jsonLength + jsonData
-        int packetLen = VarInts.sizeOf(bodyLen) + bodyLen;
+        int packetLen = 1 + VarInts.sizeOf(jsonLen) + jsonLen;
 
         ByteBuf buf = ALLOCATOR.directBuffer(packetLen);
 
         try {
-            // [packetLength VarInt]
-            VarInts.writeVarInt(buf, bodyLen);
             // [packetId VarInt] = 0x00 for status response
             VarInts.writeVarInt(buf, 0x00);
             // [jsonLength VarInt]

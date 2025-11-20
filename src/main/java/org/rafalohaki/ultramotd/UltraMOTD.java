@@ -216,9 +216,7 @@ public class UltraMOTD {
             event.setPing(cachedPing);
             lastVersionInfo.set(event.getPing().getVersion());
             lastPlayersInfo.set(event.getPing().getPlayers().orElse(null));
-            if (packetPingCache != null && packetPingCache.size() == 0) {
-                rebuildPacketCacheForCurrentMotd(event.getPing().getVersion(), event.getPing().getPlayers().orElse(null));
-            }
+            // Netty mode handles its own cache rebuilding per protocol, API mode doesn't need packet cache
         
         } catch (Exception e) {
             logger.error("Error in ping handler: {}", e.getMessage(), e);
@@ -449,81 +447,28 @@ performance:
      */
     private void tryNettyPipelineInjection() {
         try {
-            // 1) Ustal realną klasę impl ProxyServer
-            Class<?> velocityServerClass = server.getClass();
-
-            // 2) Znajdź pole typu ConnectionManager niezależnie od nazwy
-            Class<?> connMgrClass = Class.forName("com.velocitypowered.proxy.network.ConnectionManager");
-
-            java.lang.reflect.Field connectionField = java.util.Arrays.stream(velocityServerClass.getDeclaredFields())
-                    .filter(f -> f.getType().equals(connMgrClass))
-                    .findFirst()
-                    .orElse(null);
-
-            if (connectionField == null) {
-                logger.warn("No ConnectionManager field found on {}, Netty injection disabled",
-                        velocityServerClass.getName());
+            // 1) Find and validate ConnectionManager
+            Object connectionManager = findConnectionManager(server.getClass());
+            if (connectionManager == null) {
                 return;
             }
 
-            if (!connectionField.trySetAccessible()) {
-                logger.warn("Cannot access ConnectionManager field, Netty injection disabled");
-                return;
-            }
-            Object connectionManager = connectionField.get(server);
-
-            if (!connMgrClass.isInstance(connectionManager)) {
-                logger.warn("ConnectionManager field type mismatch: {}", connectionManager);
+            // 2) Get ServerChannelInitializerHolder
+            Object holderObj = getServerChannelInitializerHolder(connectionManager);
+            if (holderObj == null) {
                 return;
             }
 
-            // 3) Pobierz ServerChannelInitializerHolder przez publiczną metodę
-            var getServerChannelInitializer = connMgrClass.getMethod("getServerChannelInitializer");
-            Object holderObj = getServerChannelInitializer.invoke(connectionManager);
-
-            // 4) ServerChannelInitializerHolder
+            // 3) Get holder class and original initializer
             Class<?> holderClass = Class.forName("com.velocitypowered.proxy.network.ServerChannelInitializerHolder");
-
-            // Pobierz oryginalny initializer
             var getMethod = holderClass.getMethod("get");
             @SuppressWarnings("unchecked")
             ChannelInitializer<Channel> originalInit = (ChannelInitializer<Channel>) getMethod.invoke(holderObj);
 
-            // 5) Stwórz wrapped initializer
-            ChannelInitializer<Channel> wrapped = new ChannelInitializer<>() {
-                @Override
-                protected void initChannel(Channel ch) throws Exception {
-                    // Dodaj oryginalny initializer jako handler do pipeline
-                    ch.pipeline().addLast("ultramotd-original-init", originalInit);
+            // 4) Create wrapped initializer with our handlers
+            ChannelInitializer<Channel> wrapped = createWrappedInitializer(originalInit);
 
-                    // Dodaj własne handlery tylko jeśli Netty mode nadal włączony
-                    if (!nettyEnabled) {
-                        return;
-                    }
-
-                    // Dodaj własne handlery
-                    var p = ch.pipeline();
-                    try {
-                        var rateLimitConfig = config.network().rateLimit();
-                        boolean rateLimitEnabled = rateLimitConfig.enabled();
-                        int maxPingsPerSecond = rateLimitConfig.maxPingsPerSecondPerIp();
-
-                        if (p.get(VELOCITY_HANDLER_NAME) != null) {
-                            p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-ping",
-                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(
-                                        packetPingCache, true, rateLimitEnabled, maxPingsPerSecond));
-                        } else {
-                            p.addLast("ultramotd-ping",
-                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(
-                                        packetPingCache, true, rateLimitEnabled, maxPingsPerSecond));
-                        }
-                    } catch (Exception t) {
-                        logger.debug("Pipeline modification failed: {}", t.getMessage());
-                    }
-                }
-            };
-
-            // 6) Podmień initializer przez holder.set()
+            // 5) Replace initializer in holder
             var setMethod = holderClass.getMethod("set", ChannelInitializer.class);
             setMethod.invoke(holderObj, wrapped);
 
@@ -534,7 +479,103 @@ performance:
         }
     }
 
-    private void rebuildPacketCacheForCurrentMotd(ServerPing.Version version, ServerPing.Players players) {
+    /**
+     * Finds and validates the ConnectionManager field from Velocity server instance.
+     * Returns the ConnectionManager instance or null if not found/accessible.
+     */
+    private Object findConnectionManager(Class<?> velocityServerClass) throws ReflectiveOperationException {
+        Class<?> connMgrClass = Class.forName("com.velocitypowered.proxy.network.ConnectionManager");
+
+        java.lang.reflect.Field connectionField = java.util.Arrays.stream(velocityServerClass.getDeclaredFields())
+                .filter(f -> f.getType().equals(connMgrClass))
+                .findFirst()
+                .orElse(null);
+
+        if (connectionField == null) {
+            logger.warn("No ConnectionManager field found on {}, Netty injection disabled",
+                    velocityServerClass.getName());
+            return null;
+        }
+
+        if (!connectionField.trySetAccessible()) {
+            logger.warn("Cannot access ConnectionManager field, Netty injection disabled");
+            return null;
+        }
+
+        Object connectionManager = connectionField.get(server);
+        if (!connMgrClass.isInstance(connectionManager)) {
+            logger.warn("ConnectionManager field type mismatch: {}", connectionManager);
+            return null;
+        }
+
+        return connectionManager;
+    }
+
+    /**
+     * Gets the ServerChannelInitializerHolder from ConnectionManager.
+     */
+    private Object getServerChannelInitializerHolder(Object connectionManager) throws ReflectiveOperationException {
+        Class<?> connMgrClass = connectionManager.getClass();
+        var getServerChannelInitializer = connMgrClass.getMethod("getServerChannelInitializer");
+        return getServerChannelInitializer.invoke(connectionManager);
+    }
+
+    /**
+     * Creates the wrapped ChannelInitializer that injects our handlers.
+     */
+    private ChannelInitializer<Channel> createWrappedInitializer(ChannelInitializer<Channel> originalInit) {
+        return new ChannelInitializer<>() {
+            @Override
+            protected void initChannel(Channel ch) throws Exception {
+                // Add original initializer
+                ch.pipeline().addLast("ultramotd-original-init", originalInit);
+
+                // Add our handlers only if Netty mode is still enabled
+                if (!nettyEnabled) {
+                    return;
+                }
+
+                setupPipelineHandlers(ch.pipeline());
+            }
+        };
+    }
+
+    /**
+     * Sets up UltraMOTD handlers in the Netty pipeline.
+     */
+    private void setupPipelineHandlers(io.netty.channel.ChannelPipeline p) {
+        try {
+            var rateLimitConfig = config.network().rateLimit();
+            boolean rateLimitEnabled = rateLimitConfig.enabled();
+            int maxPingsPerSecond = rateLimitConfig.maxPingsPerSecondPerIp();
+
+            org.rafalohaki.ultramotd.netty.UltraPingNettyHandler.RateLimiter rateLimiter = rateLimitEnabled ?
+                new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler.RateLimiter(maxPingsPerSecond) : null;
+
+            org.rafalohaki.ultramotd.netty.UltraPingNettyHandler.PacketRebuilder packetRebuilder =
+                this::rebuildPacketCacheForProtocol;
+
+            if (p.get(VELOCITY_HANDLER_NAME) != null) {
+                // Insert handlers before Velocity's main handler
+                p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-handshake",
+                        new org.rafalohaki.ultramotd.netty.UltraHandshakeTracker(logger));
+                p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-ping",
+                        new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(
+                            packetPingCache, true, rateLimiter, packetRebuilder));
+            } else {
+                // Fallback: add at end of pipeline
+                p.addLast("ultramotd-handshake",
+                        new org.rafalohaki.ultramotd.netty.UltraHandshakeTracker(logger));
+                p.addLast("ultramotd-ping",
+                        new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(
+                            packetPingCache, true, rateLimiter, packetRebuilder));
+            }
+        } catch (Exception t) {
+            logger.debug("Pipeline modification failed: {}", t.getMessage());
+        }
+    }
+
+    private void rebuildPacketCacheForProtocol(int protocol, ServerPing.Version version, ServerPing.Players players) {
         if (packetPingCache == null || serverPingCache == null) {
             return;
         }
@@ -551,21 +592,16 @@ performance:
                 players
         );
 
-        // Spoof version to maximum compatible version for status responses
-        // This prevents "incompatible version" errors in server list for newer clients
-        ProtocolVersion maxVersion = ProtocolVersion.MAXIMUM_VERSION;
-        String supportedRange = ProtocolVersion.SUPPORTED_VERSION_STRING;
-
-        ServerPing.Version spoofedVersion = new ServerPing.Version(
-                maxVersion.getProtocol(),
-                supportedRange
-        );
+        // Set version to match client's protocol version for compatibility
+        // Each client gets a packet with version.protocol == their own version
+        String versionName = ProtocolVersion.SUPPORTED_VERSION_STRING; // e.g. "1.18 - 1.21.4"
+        ServerPing.Version clientVersion = new ServerPing.Version(protocol, versionName);
 
         ping = ping.asBuilder()
-                .version(spoofedVersion)
+                .version(clientVersion)
                 .build();
 
-        packetPingCache.updatePacket(new PacketPingCache.Key(0, ""), ping);
+        packetPingCache.updatePacket(new PacketPingCache.Key(protocol, ""), ping);
     }
 
     /**
