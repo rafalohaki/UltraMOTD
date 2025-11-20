@@ -30,7 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class PacketPingCache {
 
     private static final ByteBufAllocator ALLOCATOR = PooledByteBufAllocator.DEFAULT;
-    private final ConcurrentHashMap<Key, ByteBuf> cache = new ConcurrentHashMap<>();
+    private static final long TTL_MS = 2000L;
+    private final ConcurrentHashMap<Key, PacketEntry> cache = new ConcurrentHashMap<>();
     private final Logger logger;
 
     public PacketPingCache(Logger logger) {
@@ -77,13 +78,15 @@ public final class PacketPingCache {
             // [json UTF-8]
             buf.writeBytes(jsonBytes);
 
-            // Replace old buffer if present and release it
-            ByteBuf old = cache.put(key, buf);
-            if (old != null && old.refCnt() > 0) {
-                old.release();
+            long expiresAt = System.currentTimeMillis() + TTL_MS;
+            PacketEntry newEntry = new PacketEntry(buf, expiresAt);
+
+            PacketEntry old = cache.put(key, newEntry);
+            if (old != null && old.buf.refCnt() > 0) {
+                old.buf.release();
             }
 
-            logger.debug("Updated packet cache for key={} ({} bytes)", key, packetLen);
+            logger.debug("Updated packet cache for key={} ({} bytes, ttl={}ms)", key, packetLen, TTL_MS);
         } catch (Exception e) {
             // If anything fails, release the buffer to prevent leak
             buf.release();
@@ -98,11 +101,22 @@ public final class PacketPingCache {
      * @return ByteBuf with retained reference, or null if not cached
      */
     public ByteBuf getPacket(Key key) {
-        ByteBuf stored = cache.get(key);
-        if (stored == null || stored.refCnt() == 0) {
+        PacketEntry entry = cache.get(key);
+        if (entry == null) {
             return null;
         }
-        return stored.retainedSlice();
+        if (entry.buf.refCnt() == 0) {
+            cache.remove(key, entry);
+            return null;
+        }
+        long now = System.currentTimeMillis();
+        if (now >= entry.expiresAt) {
+            if (cache.remove(key, entry) && entry.buf.refCnt() > 0) {
+                entry.buf.release();
+            }
+            return null;
+        }
+        return entry.buf.retainedSlice();
     }
 
     /**
@@ -110,9 +124,9 @@ public final class PacketPingCache {
      * Call on plugin shutdown or config reload.
      */
     public void clear() {
-        cache.values().forEach(buf -> {
-            if (buf.refCnt() > 0) {
-                buf.release();
+        cache.values().forEach(entry -> {
+            if (entry.buf.refCnt() > 0) {
+                entry.buf.release();
             }
         });
         cache.clear();
@@ -124,5 +138,14 @@ public final class PacketPingCache {
      */
     public int size() {
         return cache.size();
+    }
+
+    private static final class PacketEntry {
+        final ByteBuf buf;
+        final long expiresAt;
+        PacketEntry(ByteBuf buf, long expiresAt) {
+            this.buf = buf;
+            this.expiresAt = expiresAt;
+        }
     }
 }

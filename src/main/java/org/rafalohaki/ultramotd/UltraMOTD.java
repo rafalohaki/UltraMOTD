@@ -204,18 +204,34 @@ public class UltraMOTD {
                 faviconToUse = getCachedFavicon(activeMOTD);
             }
             
-            // Get pre-built ServerPing from cache (zero allocation)
-            ServerPing cachedPing = serverPingCache.getOrCreatePing(
+            ServerPing basePing = serverPingCache.getOrCreatePing(
                 description,
                 maxPlayers,
                 faviconToUse,
                 event.getPing().getVersion(),
-                event.getPing().getPlayers().orElse(null)
+                null
             );
-        
-            event.setPing(cachedPing);
+
+            int online = server.getPlayerCount();
+            var sample = event.getPing().getPlayers()
+                    .map(ServerPing.Players::getSample)
+                    .orElse(java.util.List.<ServerPing.SamplePlayer>of());
+
+            ServerPing.Players players = new ServerPing.Players(
+                    online,
+                    maxPlayers,
+                    sample
+            );
+
+            ServerPing finalPing = basePing.asBuilder()
+                    .onlinePlayers(players.getOnline())
+                    .maximumPlayers(players.getMax())
+                    .samplePlayers(players.getSample().toArray(ServerPing.SamplePlayer[]::new))
+                    .build();
+
+            event.setPing(finalPing);
             lastVersionInfo.set(event.getPing().getVersion());
-            lastPlayersInfo.set(event.getPing().getPlayers().orElse(null));
+            lastPlayersInfo.set(players);
             // Netty mode handles its own cache rebuilding per protocol, API mode doesn't need packet cache
         
         } catch (Exception e) {
@@ -584,21 +600,28 @@ performance:
             return;
         }
         Favicon faviconToUse = motd.enableFavicon() ? getCachedFavicon(motd) : null;
-        ServerPing ping = serverPingCache.getOrCreatePing(
+        int maxPlayers = calculateMaxPlayers(motd);
+
+        ServerPing basePing = serverPingCache.getOrCreatePing(
                 motd.description(),
-                calculateMaxPlayers(motd),
+                maxPlayers,
                 faviconToUse,
                 version,
-                players
+                null
         );
 
-        // Set version to match client's protocol version for compatibility
-        // Each client gets a packet with version.protocol == their own version
-        String versionName = ProtocolVersion.SUPPORTED_VERSION_STRING; // e.g. "1.18 - 1.21.4"
+        int online = server.getPlayerCount();
+        var lastPlayers = lastPlayersInfo.get();
+        var sample = lastPlayers != null ? lastPlayers.getSample() : java.util.List.<ServerPing.SamplePlayer>of();
+
+        String versionName = ProtocolVersion.SUPPORTED_VERSION_STRING;
         ServerPing.Version clientVersion = new ServerPing.Version(protocol, versionName);
 
-        ping = ping.asBuilder()
+        ServerPing ping = basePing.asBuilder()
                 .version(clientVersion)
+                .onlinePlayers(online)
+                .maximumPlayers(maxPlayers)
+                .samplePlayers(sample.toArray(ServerPing.SamplePlayer[]::new))
                 .build();
 
         packetPingCache.updatePacket(new PacketPingCache.Key(protocol, ""), ping);
