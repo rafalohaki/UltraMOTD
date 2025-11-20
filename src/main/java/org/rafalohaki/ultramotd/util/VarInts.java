@@ -46,7 +46,7 @@ public final class VarInts {
             value |= (currentByte & 0x7F) << position;
             
             if (position >= 32) {
-                throw new RuntimeException("VarInt is too big");
+                throw new VarIntException("VarInt is too big (exceeds maximum length of 5 bytes)");
             }
             
             position += 7;
