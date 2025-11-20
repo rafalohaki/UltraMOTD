@@ -1,0 +1,12 @@
+{
+  "id": "ultramotd",
+  "name": "UltraMOTD",
+  "version": "1.0-SNAPSHOT",
+  "description": "High Performance MOTD Plugin for Velocity",
+  "url": "https://github.com/rafalohaki/ultramotd",
+  "authors": [
+    "rafalohaki"
+  ],
+  "dependencies": [],
+  "main": "org.rafalohaki.ultramotd.UltraMOTD"
+}
