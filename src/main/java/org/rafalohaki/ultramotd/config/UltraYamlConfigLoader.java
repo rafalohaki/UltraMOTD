@@ -101,7 +101,8 @@ public class UltraYamlConfigLoader {
                 parseCacheConfig(yaml),
                 parseSerializationConfig(yaml),
                 parseNetworkConfig(yaml),
-                parseJava21Config(yaml)
+                parseJava21Config(yaml),
+                parseVersionRangeConfig(yaml)
             );
         } catch (YAMLException e) {
             throw new org.rafalohaki.ultramotd.config.ConfigParseException("YAML parsing failed", e);
@@ -129,6 +130,16 @@ public class UltraYamlConfigLoader {
         boolean enableVirtualThreads = getBoolean(motdMap, ConfigConstants.ENABLE_VIRTUAL_THREADS, true);
 
         return new MOTDConfig(description, maxPlayers, enableFavicon, faviconPath, enableVirtualThreads);
+    }
+
+    private UltraConfig.VersionRangeConfig parseVersionRangeConfig(Map<String, Object> yaml) {
+        Map<String, Object> vrMap = getMap(yaml, ConfigConstants.VERSION_RANGE, null);
+        if (vrMap == null) {
+            return UltraConfig.VersionRangeConfig.getDefault();
+        }
+        String min = getString(vrMap, ConfigConstants.MIN_VERSION, "1.18");
+        String max = getString(vrMap, ConfigConstants.MAX_VERSION, "AUTO");
+        return new UltraConfig.VersionRangeConfig(min, max);
     }
 
     private UltraConfig.PlayerCountConfig parsePlayerCountConfig(Map<String, Object> yaml) {

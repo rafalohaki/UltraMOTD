@@ -187,7 +187,7 @@ public class UltraMOTDStateMachine {
         try {
             reloadListener.accept(motdConfig);
         } catch (Exception e) {
-            logger.debug("Reload listener failed: {}", e.getMessage());
+            logger.warn("Reload listener failed for MOTD config: {}", e.getMessage(), e);
         }
     }
 

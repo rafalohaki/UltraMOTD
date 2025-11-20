@@ -20,7 +20,7 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
 
     @FunctionalInterface
     public interface PacketRebuilder {
-        void rebuildPacketForProtocol(int protocol, com.velocitypowered.api.proxy.server.ServerPing.Version version, com.velocitypowered.api.proxy.server.ServerPing.Players players);
+        void rebuildPacketForProtocol(int protocol);
     }
 
     public UltraPingNettyHandler(PacketPingCache packetCache, boolean enabled) {
@@ -92,19 +92,12 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
 
     private void rebuildPacketForProtocol(int protocolVersion) {
         if (packetRebuilder == null) {
-            return; // No rebuilder available, fallback to standard Velocity handling
+            return;
         }
-
         try {
-            // Use last known version info from UltraMOTD or fallback to defaults
-            // In a real implementation, we'd pass this from UltraMOTD via the rebuilder
-            com.velocitypowered.api.proxy.server.ServerPing.Version defaultVersion =
-                new com.velocitypowered.api.proxy.server.ServerPing.Version(protocolVersion, "Unknown");
-            com.velocitypowered.api.proxy.server.ServerPing.Players defaultPlayers = null;
-
-            packetRebuilder.rebuildPacketForProtocol(protocolVersion, defaultVersion, defaultPlayers);
+            packetRebuilder.rebuildPacketForProtocol(protocolVersion);
         } catch (Exception e) {
-            // Log error but don't crash - fallback will handle this
+            // swallow and fallback to upstream handling
         }
     }
 

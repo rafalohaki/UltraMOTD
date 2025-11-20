@@ -11,7 +11,8 @@ public record UltraConfig(
     CacheConfig cache,
     SerializationConfig serialization,
     NetworkConfig network,
-    Java21Config java21
+    Java21Config java21,
+    VersionRangeConfig versionRange
 ) {
 
     /**
@@ -376,7 +377,8 @@ public record UltraConfig(
             CacheConfig.getDefault(),
             SerializationConfig.getDefault(),
             NetworkConfig.getDefault(),
-            Java21Config.getDefault()
+            Java21Config.getDefault(),
+            VersionRangeConfig.getDefault()
         );
     }
 
@@ -392,6 +394,15 @@ public record UltraConfig(
         }
         if (cache.favicon().maxCacheSize() < 1) {
             throw new IllegalArgumentException("Favicon cache size must be positive");
+        }
+    }
+
+    /**
+     * Version range display configuration (e.g., "1.18 - 1.21.x")
+     */
+    public record VersionRangeConfig(String min, String max) {
+        public static VersionRangeConfig getDefault() {
+            return new VersionRangeConfig("1.18", "AUTO");
         }
     }
 }

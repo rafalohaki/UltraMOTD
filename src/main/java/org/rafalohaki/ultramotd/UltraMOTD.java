@@ -212,7 +212,7 @@ public class UltraMOTD {
                 null
             );
 
-            int online = server.getPlayerCount();
+            int online = computeDisplayedOnline(maxPlayers);
             var sample = event.getPing().getPlayers()
                     .map(ServerPing.Players::getSample)
                     .orElse(java.util.List.<ServerPing.SamplePlayer>of());
@@ -280,6 +280,13 @@ motd:
   enableFavicon: true
   faviconPath: "favicons/default.png"
   enableVirtualThreads: true
+
+# ========================================
+# VERSION RANGE DISPLAY
+# ========================================
+versionRange:
+  min: "1.18"
+  max: "AUTO"   # AUTO = use Velocity's current maximum
 
 # ========================================
 # PLAYER COUNT MANIPULATION
@@ -591,7 +598,7 @@ performance:
         }
     }
 
-    private void rebuildPacketCacheForProtocol(int protocol, ServerPing.Version version, ServerPing.Players players) {
+    private void rebuildPacketCacheForProtocol(int protocol) {
         if (packetPingCache == null || serverPingCache == null) {
             return;
         }
@@ -602,20 +609,22 @@ performance:
         Favicon faviconToUse = motd.enableFavicon() ? getCachedFavicon(motd) : null;
         int maxPlayers = calculateMaxPlayers(motd);
 
+        var range = config.versionRange();
+        String autoMax = ProtocolVersion.MAXIMUM_VERSION.getMostRecentSupportedVersion();
+        String versionName = range.min() + " - " + ("AUTO".equalsIgnoreCase(range.max()) ? autoMax : range.max());
+        ServerPing.Version clientVersion = new ServerPing.Version(protocol, versionName);
+
         ServerPing basePing = serverPingCache.getOrCreatePing(
                 motd.description(),
                 maxPlayers,
                 faviconToUse,
-                version,
+                clientVersion,
                 null
         );
 
-        int online = server.getPlayerCount();
+        int online = computeDisplayedOnline(maxPlayers);
         var lastPlayers = lastPlayersInfo.get();
         var sample = lastPlayers != null ? lastPlayers.getSample() : java.util.List.<ServerPing.SamplePlayer>of();
-
-        String versionName = ProtocolVersion.SUPPORTED_VERSION_STRING;
-        ServerPing.Version clientVersion = new ServerPing.Version(protocol, versionName);
 
         ServerPing ping = basePing.asBuilder()
                 .version(clientVersion)
@@ -625,6 +634,23 @@ performance:
                 .build();
 
         packetPingCache.updatePacket(new PacketPingCache.Key(protocol, ""), ping);
+    }
+
+    private int computeDisplayedOnline(int maxPlayers) {
+        int real = server.getPlayerCount();
+        var pc = config.playerCount();
+        if (pc.enabled() && !pc.showRealPlayers()) {
+            int addCount = pc.maxCount();
+            int fake = switch (pc.maxCountType()) {
+                case VARIABLE -> addCount;
+                case ADD_SOME -> real + addCount;
+                case MULTIPLY -> real * addCount;
+                case FIXED -> addCount;
+            };
+            if (fake < 0) fake = 0;
+            return Math.min(fake, maxPlayers);
+        }
+        return Math.min(real, maxPlayers);
     }
 
     /**

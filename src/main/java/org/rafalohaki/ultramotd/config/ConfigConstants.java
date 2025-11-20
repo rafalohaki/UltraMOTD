@@ -80,6 +80,11 @@ public final class ConfigConstants {
     public static final String ENABLE_IP_LOGGING = "enableIPLogging";
     public static final String ENABLE_GEO_BLOCKING = "enableGeoBlocking";
     public static final String ALLOWED_COUNTRIES = "allowedCountries";
+
+    // Version range fields
+    public static final String VERSION_RANGE = "versionRange";
+    public static final String MIN_VERSION = "min";
+    public static final String MAX_VERSION = "max";
     
     // Default values
     public static final String DEFAULT_FAVICON_PATH = "favicons/default.png";

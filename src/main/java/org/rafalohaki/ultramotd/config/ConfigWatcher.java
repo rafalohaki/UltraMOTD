@@ -4,9 +4,7 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+ 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -19,7 +17,6 @@ public class ConfigWatcher {
 
     private final Logger logger;
     private final WatchService watchService;
-    private final ExecutorService executor;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final Consumer<Path> reloadCallback;
     private final Object threadLock = new Object();
@@ -28,11 +25,6 @@ public class ConfigWatcher {
     public ConfigWatcher(Logger logger, Consumer<Path> reloadCallback) throws IOException {
         this.logger = logger;
         this.watchService = FileSystems.getDefault().newWatchService();
-        this.executor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "ConfigWatcher");
-            t.setDaemon(true);
-            return t;
-        });
         this.reloadCallback = reloadCallback;
     }
 
@@ -99,18 +91,7 @@ public class ConfigWatcher {
         try {
             watchService.close();
         } catch (IOException e) {
-            logger.warn("Error closing WatchService: {}", e.getMessage());
-        }
-
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            logger.warn("Interrupted while stopping ConfigWatcher executor");
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
+            logger.warn("Error closing WatchService", e);
         }
         
         logger.info("ConfigWatcher stopped");
