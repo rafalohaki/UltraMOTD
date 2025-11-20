@@ -45,22 +45,25 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
-        // Lekki rate limit per-IP dla STATUS
-        InetSocketAddress remote = (InetSocketAddress) ctx.channel().remoteAddress();
-        InetAddress ip = remote.getAddress();
-        long now = System.currentTimeMillis();
-        if (!rateLimiter.allow(ip, now)) {
-            // Rate limit exceeded - close connection silently (only debug log)
-            if (msg instanceof ByteBuf buf) {
-                buf.release();
-            }
-            ctx.close();
-            return;
-        }
-
+        // Najpierw sprawdzamy, czy to w ogóle STATUS request
         if (!isStatusRequest(msg)) {
             super.channelRead(ctx, msg);
             return;
+        }
+
+        // Dopiero dla STATUS request robimy rate limiting
+        if (rateLimiter != null) {
+            InetSocketAddress remote = (InetSocketAddress) ctx.channel().remoteAddress();
+            InetAddress ip = remote.getAddress();
+            long now = System.currentTimeMillis();
+            if (!rateLimiter.allow(ip, now)) {
+                // Rate limit exceeded - close connection silently (only debug log)
+                if (msg instanceof ByteBuf buf) {
+                    buf.release();
+                }
+                ctx.close();
+                return;
+            }
         }
 
         PacketPingCache.Key key = extractKey();

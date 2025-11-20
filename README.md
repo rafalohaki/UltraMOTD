@@ -26,7 +26,8 @@ High-performance MOTD plugin for the Velocity proxy focused on predictable laten
    
 5. **Production-Ready**
    - Graceful fallback from Netty to standard mode
-   - Built-in DDoS protection with configurable rate limiting
+   - Built-in DDoS protection with configurable rate limiting (STATUS requests only)
+   - Version spoofing for maximum client compatibility (no "incompatible version" errors)
    - No reflection/unsafe in default mode
    - Comprehensive configuration options
 

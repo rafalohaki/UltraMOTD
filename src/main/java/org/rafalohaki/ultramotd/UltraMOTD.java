@@ -5,6 +5,7 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPingEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -549,6 +550,21 @@ performance:
                 version,
                 players
         );
+
+        // Spoof version to maximum compatible version for status responses
+        // This prevents "incompatible version" errors in server list for newer clients
+        ProtocolVersion maxVersion = ProtocolVersion.MAXIMUM_VERSION;
+        String supportedRange = ProtocolVersion.SUPPORTED_VERSION_STRING;
+
+        ServerPing.Version spoofedVersion = new ServerPing.Version(
+                maxVersion.getProtocol(),
+                supportedRange
+        );
+
+        ping = ping.asBuilder()
+                .version(spoofedVersion)
+                .build();
+
         packetPingCache.updatePacket(new PacketPingCache.Key(0, ""), ping);
     }
 
