@@ -82,6 +82,8 @@ public class UltraMOTD {
 
     private final AtomicReference<ServerPing.Version> lastVersionInfo = new AtomicReference<>();
     private final AtomicReference<ServerPing.Players> lastPlayersInfo = new AtomicReference<>();
+    // Note: Currently used only for rebuildPacketCacheForCurrentMotd() but could be used
+    // in future for more advanced packet cache keying (per-protocol, per-player-count variants)
 
     @Inject
     public UltraMOTD(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -333,6 +335,7 @@ performance:
     }
 
     private int calculateMaxPlayers(MOTDConfig baseConfig) {
+        // Null-safe: returns 100 if baseConfig is null, otherwise uses baseConfig.maxPlayers()
         if (!config.playerCount().enabled() || baseConfig == null) {
             return baseConfig != null ? baseConfig.maxPlayers() : 100;
         }
