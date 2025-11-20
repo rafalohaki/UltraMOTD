@@ -279,6 +279,24 @@ playerCount:
   showRealPlayers: true
 
 # ========================================
+# NETWORK AND SECURITY SETTINGS
+# ========================================
+network:
+  ipManagement:
+    enableWhitelist: false
+    whitelist: []
+    enableBlacklist: false
+    blacklist: []
+    enableDeduplication: true
+    logDuplicates: false
+  rateLimit:
+    enabled: true
+    maxPingsPerSecondPerIp: 10
+  enableIPLogging: false
+  enableGeoBlocking: false
+  allowedCountries: []
+
+# ========================================
 # CACHING SETTINGS
 # ========================================
 cache:
@@ -485,12 +503,18 @@ performance:
                     // Dodaj własne handlery
                     var p = ch.pipeline();
                     try {
+                        var rateLimitConfig = config.network().rateLimit();
+                        boolean rateLimitEnabled = rateLimitConfig.enabled();
+                        int maxPingsPerSecond = rateLimitConfig.maxPingsPerSecondPerIp();
+
                         if (p.get(VELOCITY_HANDLER_NAME) != null) {
                             p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-ping",
-                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(packetPingCache, true));
+                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(
+                                        packetPingCache, true, rateLimitEnabled, maxPingsPerSecond));
                         } else {
                             p.addLast("ultramotd-ping",
-                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(packetPingCache, true));
+                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(
+                                        packetPingCache, true, rateLimitEnabled, maxPingsPerSecond));
                         }
                     } catch (Exception t) {
                         logger.debug("Pipeline modification failed: {}", t.getMessage());

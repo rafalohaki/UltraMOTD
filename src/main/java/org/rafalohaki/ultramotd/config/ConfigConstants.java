@@ -66,6 +66,21 @@ public final class ConfigConstants {
     public static final String ENABLE_RECORD_PATTERNS = "enableRecordPatterns";
     public static final String ENABLE_STRING_TEMPLATES = "enableStringTemplates";
     
+    // Network fields
+    public static final String NETWORK = "network";
+    public static final String IP_MANAGEMENT = "ipManagement";
+    public static final String ENABLE_WHITELIST = "enableWhitelist";
+    public static final String WHITELIST = "whitelist";
+    public static final String ENABLE_BLACKLIST = "enableBlacklist";
+    public static final String BLACKLIST = "blacklist";
+    public static final String ENABLE_DEDUPLICATION = "enableDeduplication";
+    public static final String LOG_DUPLICATES = "logDuplicates";
+    public static final String RATE_LIMIT = "rateLimit";
+    public static final String MAX_PINGS_PER_SECOND_PER_IP = "maxPingsPerSecondPerIp";
+    public static final String ENABLE_IP_LOGGING = "enableIPLogging";
+    public static final String ENABLE_GEO_BLOCKING = "enableGeoBlocking";
+    public static final String ALLOWED_COUNTRIES = "allowedCountries";
+    
     // Default values
     public static final String DEFAULT_FAVICON_PATH = "favicons/default.png";
     public static final String DEFAULT_MOTD_TEXT = "§aUltraMOTD §7- §bHigh Performance MOTD";

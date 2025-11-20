@@ -100,6 +100,7 @@ public class UltraYamlConfigLoader {
                 parsePerformanceConfig(yaml),
                 parseCacheConfig(yaml),
                 parseSerializationConfig(yaml),
+                parseNetworkConfig(yaml),
                 parseJava21Config(yaml)
             );
         } catch (YAMLException e) {
@@ -306,13 +307,56 @@ public class UltraYamlConfigLoader {
         if (javaMap == null) {
             return UltraConfig.Java21Config.getDefault();
         }
-        
+
         boolean virtualThreads = getBoolean(javaMap, ConfigConstants.ENABLE_VIRTUAL_THREADS, true);
         boolean preview = getBoolean(javaMap, ConfigConstants.ENABLE_PREVIEW_FEATURES, false);
         boolean recordPatterns = getBoolean(javaMap, ConfigConstants.ENABLE_RECORD_PATTERNS, true);
         boolean stringTemplates = getBoolean(javaMap, ConfigConstants.ENABLE_STRING_TEMPLATES, false);
 
         return new UltraConfig.Java21Config(virtualThreads, preview, recordPatterns, stringTemplates);
+    }
+
+    private UltraConfig.NetworkConfig parseNetworkConfig(Map<String, Object> yaml) {
+        Map<String, Object> netMap = getMap(yaml, ConfigConstants.NETWORK, null);
+        if (netMap == null) {
+            return UltraConfig.NetworkConfig.getDefault();
+        }
+
+        return new UltraConfig.NetworkConfig(
+            parseIPConfig(netMap),
+            parseRateLimitConfig(netMap),
+            getBoolean(netMap, ConfigConstants.ENABLE_IP_LOGGING, false),
+            getBoolean(netMap, ConfigConstants.ENABLE_GEO_BLOCKING, false),
+            getStringArray(netMap, ConfigConstants.ALLOWED_COUNTRIES, new String[]{})
+        );
+    }
+
+    private UltraConfig.NetworkConfig.IPConfig parseIPConfig(Map<String, Object> netMap) {
+        Map<String, Object> ipMap = getMap(netMap, ConfigConstants.IP_MANAGEMENT, null);
+        if (ipMap == null) {
+            return new UltraConfig.NetworkConfig.IPConfig(false, new String[]{}, false, new String[]{}, true, false);
+        }
+
+        boolean whitelistEnabled = getBoolean(ipMap, ConfigConstants.ENABLE_WHITELIST, false);
+        String[] whitelist = getStringArray(ipMap, ConfigConstants.WHITELIST, new String[]{});
+        boolean blacklistEnabled = getBoolean(ipMap, ConfigConstants.ENABLE_BLACKLIST, false);
+        String[] blacklist = getStringArray(ipMap, ConfigConstants.BLACKLIST, new String[]{});
+        boolean deduplication = getBoolean(ipMap, ConfigConstants.ENABLE_DEDUPLICATION, true);
+        boolean logDuplicates = getBoolean(ipMap, ConfigConstants.LOG_DUPLICATES, false);
+
+        return new UltraConfig.NetworkConfig.IPConfig(whitelistEnabled, whitelist, blacklistEnabled, blacklist, deduplication, logDuplicates);
+    }
+
+    private UltraConfig.NetworkConfig.RateLimitConfig parseRateLimitConfig(Map<String, Object> netMap) {
+        Map<String, Object> rateMap = getMap(netMap, ConfigConstants.RATE_LIMIT, null);
+        if (rateMap == null) {
+            return UltraConfig.NetworkConfig.RateLimitConfig.getDefault();
+        }
+
+        boolean enabled = getBoolean(rateMap, ConfigConstants.ENABLED, true);
+        int maxPings = getInt(rateMap, ConfigConstants.MAX_PINGS_PER_SECOND_PER_IP, 10);
+
+        return new UltraConfig.NetworkConfig.RateLimitConfig(enabled, maxPings);
     }
 
     /**
@@ -436,6 +480,19 @@ public class UltraYamlConfigLoader {
             } catch (NumberFormatException e) {
                 // Fall through to default
             }
+        }
+        return defaultValue;
+    }
+
+    private String[] getStringArray(Map<String, Object> map, String key, String[] defaultValue) {
+        Object value = map.get(key);
+        if (value instanceof java.util.List<?> list) {
+            return list.stream()
+                    .map(Object::toString)
+                    .toArray(String[]::new);
+        }
+        if (value instanceof String[] array) {
+            return array;
         }
         return defaultValue;
     }

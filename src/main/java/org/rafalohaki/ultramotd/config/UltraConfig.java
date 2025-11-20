@@ -10,6 +10,7 @@ public record UltraConfig(
     PerformanceConfig performance,
     CacheConfig cache,
     SerializationConfig serialization,
+    NetworkConfig network,
     Java21Config java21
 ) {
 
@@ -265,10 +266,21 @@ public record UltraConfig(
      */
     public record NetworkConfig(
         IPConfig ipManagement,
+        RateLimitConfig rateLimit,
         boolean enableIPLogging,
         boolean enableGeoBlocking,
         String[] allowedCountries
     ) {
+
+        public record RateLimitConfig(
+            boolean enabled,
+            int maxPingsPerSecondPerIp
+        ) {
+
+            public static RateLimitConfig getDefault() {
+                return new RateLimitConfig(true, 10);
+            }
+        }
 
         public record IPConfig(
             boolean enableWhitelist,
@@ -316,6 +328,7 @@ public record UltraConfig(
         public static NetworkConfig getDefault() {
             return new NetworkConfig(
                 new IPConfig(false, new String[]{}, false, new String[]{}, true, false),
+                RateLimitConfig.getDefault(),
                 false,
                 false,
                 new String[]{}
@@ -362,6 +375,7 @@ public record UltraConfig(
             PerformanceConfig.getDefault(),
             CacheConfig.getDefault(),
             SerializationConfig.getDefault(),
+            NetworkConfig.getDefault(),
             Java21Config.getDefault()
         );
     }

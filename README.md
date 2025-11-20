@@ -6,7 +6,7 @@ High-performance MOTD plugin for the Velocity proxy focused on predictable laten
 
 1. **Multi-Level Caching Architecture**
    - **API Mode (default)**: ServerPing pre-building cache (zero allocation)
-   - **Experimental Packet Mode**: Pre-serialized packet cache (FastMOTD-style)
+   - **Packet Mode**: Pre-serialized packet cache
    - Favicon cache with TTL, size limits, and Netty direct buffers
    - MiniMessage parsing moved out of hot-path
 
@@ -17,7 +17,7 @@ High-performance MOTD plugin for the Velocity proxy focused on predictable laten
 
 3. **Performance Modes**
    - **Standard Mode**: Zero-allocation ServerPing cache (~80% of max speed, 100% stable)
-   - **Experimental Netty Mode**: Packet-level caching (~95% of max speed, requires `performance.netty.pipelineInjection: true`)
+   - **Netty Mode**: Packet-level caching (~95% of max speed, requires `performance.netty.pipelineInjection: true`)
    - Sub-microsecond ping handler latency in both modes
 
 4. **Java 21 Optimizations**
@@ -25,9 +25,10 @@ High-performance MOTD plugin for the Velocity proxy focused on predictable laten
    - Record patterns and modern language features for zero-cost config parsing
    
 5. **Production-Ready**
-   - Graceful fallback from experimental to standard mode
+   - Graceful fallback from Netty to standard mode
+   - Built-in DDoS protection with configurable rate limiting
    - No reflection/unsafe in default mode
-   - Clear warnings for experimental features
+   - Comprehensive configuration options
 
 ## License
 
