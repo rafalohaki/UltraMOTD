@@ -178,10 +178,19 @@ public class UltraMOTD {
 # ========================================
 motd:
   # Multi-line MOTD support - use \\n for line breaks in MiniMessage format
-  # Supports: gradients, hex colors, unicode, bold/italic, and all Adventure formatting
+  # Supports ALL Kyori Adventure MiniMessage features:
+  #   - Colors: <color:#hex>, <red>, <blue>, <green>, <yellow>, <gold>, etc.
+  #   - Gradients: <gradient:#hex1:#hex2>text</gradient>, <gradient:#hex1:#hex2:#hex3>
+  #   - Text styling: <bold>, <italic>, <underlined>, <strikethrough>, <obfuscated>
+  #   - Hover events: <hover:show_text:'Hover text here'>
+  #   - Click events: <click:run_command:'/command'>, <click:open_url:'https://...'>
+  #   - Keybinds: <key:key.jump>, <key:key.inventory>
+  #   - Unicode characters: ■, ⚡, ↔, •, ★, ✓, etc.
+  #   - Custom: <center> for center alignment (custom UltraMOTD tag)
   description: |
-    <color:#FFD700>■</color> <gradient:#39FF14:#00cc00><bold>ANARCHIA POLSKA</bold></gradient> <color:#FFD700>■</color> <gradient:#FFD700:#FFA500>Od 2019 roku</gradient>
-    <gradient:#7FFF00:#32CD32><bold>2b2t.pl</bold></gradient> <red>⚡</red> <gradient:#FF6347:#FF1493>1.18 <white>↔</white> 1.21+</gradient> <red>⚡</red> <gradient:#D87093:#DA70D6><italic>Jedna Mapa, Tysiące Historii</italic></gradient>
+    <center><color:#FFD700>■ ■ ■</color> <gradient:#facc15:#f97316:#dc2626><bold>UltraMOTD</bold></gradient> <color:#FFD700>■ ■ ■</color></center>
+    <center><gradient:#7FFF00:#32CD32>High Performance Velocity MOTD Plugin</gradient></center>
+    <center><gradient:#FF6347:#FF1493>MiniMessage · Caching · Java 21 Optimized</gradient></center>
   maxPlayers: 100
   enableFavicon: true
   faviconPath: "favicons/default.png"

@@ -18,6 +18,9 @@ public class UltraYamlConfigLoader {
 
     private static final Yaml YAML = new Yaml();
     private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
+    private static final int MOTD_LINE_WIDTH = 60; // Approximate MOTD line width in characters
+    private static final String CENTER_TAG_OPEN = "<center>";
+    private static final String CENTER_TAG_CLOSE = "</center>";
 
     private final Logger logger;
 
@@ -313,28 +316,82 @@ public class UltraYamlConfigLoader {
     }
 
     /**
-     * Parses text component from YAML value.
+     * Parses Component from text, handling custom formatting tags like <center>.
+     * Supports MiniMessage with preprocessing for unsupported tags.
      */
     private Component parseComponent(Object value) {
         if (value == null) {
-            return Component.text(ConfigConstants.DEFAULT_MOTD_TEXT);
+            return Component.text("");
         }
 
         String text = value.toString();
+        
+        // Pre-process custom tags that MiniMessage doesn't support natively
+        text = processCustomTags(text);
+        
         try {
             // Try MiniMessage format first
             return MINI_MESSAGE.deserialize(text);
         } catch (Exception e) {
             // Fallback to plain text with legacy formatting
-            return Component.text(translateLegacyColors(text));
+            logger.warn("Failed to parse MiniMessage, using plain text: {}", e.getMessage());
+            return Component.text(text.replaceAll("[§&][0-9a-fk-or]", ""));
         }
     }
-
-    /**
-     * Translates legacy color codes (&) to modern format.
+    
+        /**
+     * Pre-processes custom tags before MiniMessage parsing.
+     * Handles:
+     * - <center> tags for center alignment
+     * - Preserves all standard MiniMessage formatting
+     * 
+     * Supports all MiniMessage/Kyori Adventure features:
+     * - Colors: <color:#hex>, <red>, <blue>, etc.
+     * - Gradients: <gradient:#hex1:#hex2>text</gradient>
+     * - Text styling: <bold>, <italic>, <underlined>, <strikethrough>, <obfuscated>
+     * - Hover events: <hover:show_text:'text'>
+     * - Click events: <click:run_command:'/command'>
+     * - Keybinds: <key:key.jump>
+     * - Translatable: <lang:translation.key>
+     * - Selector: <selector:@a>
+     * - Score: <score:objective:selector>
+     * - NBT: <nbt:entity.UUID.path>
      */
-    private String translateLegacyColors(String text) {
-        return text.replace("&", "§");
+    private String processCustomTags(String text) {
+        if (!text.contains(CENTER_TAG_OPEN)) {
+            return text;
+        }
+        
+        StringBuilder result = new StringBuilder();
+        String[] lines = text.split("\n");
+        
+        for (String line : lines) {
+            if (line.contains(CENTER_TAG_OPEN) && line.contains(CENTER_TAG_CLOSE)) {
+                // Extract content between <center> and </center>
+                String content = line.substring(
+                    line.indexOf(CENTER_TAG_OPEN) + CENTER_TAG_OPEN.length(),
+                    line.lastIndexOf(CENTER_TAG_CLOSE)
+                );
+                
+                // Strip MiniMessage tags to count visible characters
+                String stripped = content.replaceAll("<[^>]+>", "");
+                int visibleLength = stripped.length();
+                int padding = Math.max(0, (MOTD_LINE_WIDTH - visibleLength) / 2);
+                
+                // Add spaces for centering
+                result.append(" ".repeat(padding)).append(content);
+            } else {
+                result.append(line);
+            }
+            result.append("\n");
+        }
+        
+        // Remove trailing newline
+        if (!result.isEmpty() && result.charAt(result.length() - 1) == '\n') {
+            result.setLength(result.length() - 1);
+        }
+        
+        return result.toString();
     }
 
     // Helper methods for safe YAML value extraction
