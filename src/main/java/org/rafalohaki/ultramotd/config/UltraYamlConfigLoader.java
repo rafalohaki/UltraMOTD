@@ -97,7 +97,9 @@ public class UltraYamlConfigLoader {
                 parsePerformanceConfig(yaml),
                 parseCacheConfig(yaml),
                 parseSerializationConfig(yaml),
-                parseJava21Config(yaml)
+                parseJava21Config(yaml),
+                parseServerConfig(yaml),
+                parseNetworkConfig(yaml)
             );
         } catch (YAMLException e) {
             throw new org.rafalohaki.ultramotd.config.ConfigParseException("YAML parsing failed", e);
@@ -312,6 +314,54 @@ public class UltraYamlConfigLoader {
         return new UltraConfig.Java21Config(virtualThreads, preview, recordPatterns, stringTemplates);
     }
 
+    private UltraConfig.ServerConfig parseServerConfig(Map<String, Object> yaml) {
+        Map<String, Object> serverMap = getMap(yaml, "server", null);
+        if (serverMap == null) {
+            return UltraConfig.ServerConfig.getDefault();
+        }
+        
+        String name = getString(serverMap, "name", "UltraMOTD Server");
+        String description = getString(serverMap, "description", "High-performance Minecraft server");
+        String website = getString(serverMap, "website", "");
+        String discord = getString(serverMap, "discord", "");
+        String region = getString(serverMap, "region", "EU");
+        String[] tags = getStringArray(serverMap, "tags", new String[]{"minecraft"});
+        String language = getString(serverMap, "language", "en");
+
+        return new UltraConfig.ServerConfig(name, description, website, discord, region, tags, language);
+    }
+
+    private UltraConfig.NetworkConfig parseNetworkConfig(Map<String, Object> yaml) {
+        Map<String, Object> networkMap = getMap(yaml, "network", null);
+        if (networkMap == null) {
+            return UltraConfig.NetworkConfig.getDefault();
+        }
+        
+        Map<String, Object> ipMap = getMap(networkMap, "ipManagement", null);
+        UltraConfig.NetworkConfig.IPConfig ipConfig;
+        
+        if (ipMap != null) {
+            boolean enableWhitelist = getBoolean(ipMap, "enableWhitelist", false);
+            String[] whitelist = getStringArray(ipMap, "whitelist", new String[]{});
+            boolean enableBlacklist = getBoolean(ipMap, "enableBlacklist", false);
+            String[] blacklist = getStringArray(ipMap, "blacklist", new String[]{});
+            boolean enableDeduplication = getBoolean(ipMap, "enableDeduplication", true);
+            boolean logDuplicates = getBoolean(ipMap, "logDuplicates", false);
+            
+            ipConfig = new UltraConfig.NetworkConfig.IPConfig(
+                enableWhitelist, whitelist, enableBlacklist, blacklist, enableDeduplication, logDuplicates
+            );
+        } else {
+            ipConfig = new UltraConfig.NetworkConfig.IPConfig(false, new String[]{}, false, new String[]{}, true, false);
+        }
+        
+        boolean enableIPLogging = getBoolean(networkMap, "enableIPLogging", false);
+        boolean enableGeoBlocking = getBoolean(networkMap, "enableGeoBlocking", false);
+        String[] allowedCountries = getStringArray(networkMap, "allowedCountries", new String[]{});
+
+        return new UltraConfig.NetworkConfig(ipConfig, enableIPLogging, enableGeoBlocking, allowedCountries);
+    }
+
     /**
      * Parses text component from YAML value.
      */
@@ -392,6 +442,17 @@ public class UltraYamlConfigLoader {
         Object value = map.get(key);
         if (value != null) {
             return value.toString();
+        }
+        return defaultValue;
+    }
+
+    private String[] getStringArray(Map<String, Object> map, String key, String[] defaultValue) {
+        Object value = map.get(key);
+        if (value instanceof java.util.List<?> list) {
+            return list.stream().map(Object::toString).toArray(String[]::new);
+        }
+        if (value instanceof String str) {
+            return str.split(",");
         }
         return defaultValue;
     }

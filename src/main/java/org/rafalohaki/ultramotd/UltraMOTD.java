@@ -16,6 +16,8 @@ import org.rafalohaki.ultramotd.config.UltraConfig;
 import org.rafalohaki.ultramotd.config.UltraYamlConfigLoader;
 import org.rafalohaki.ultramotd.config.ConfigConstants;
 import org.rafalohaki.ultramotd.state.UltraMOTDStateMachine;
+import org.rafalohaki.ultramotd.cache.FaviconCache;
+import org.rafalohaki.ultramotd.cache.JsonCache;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -28,7 +30,7 @@ import java.nio.file.Path;
  * - Zero-cost config deserialization using Java 21 record patterns
  * - Virtual threads support for async operations
  * - Config hot-reloading with file watching
- * - Performance metrics and monitoring
+ * - High-performance caching with TTL and size limits
  */
 @Plugin(
     id = "ultramotd",
@@ -45,6 +47,10 @@ public class UltraMOTD {
     private UltraConfig config;
     private UltraMOTDStateMachine stateMachine;
     private Favicon favicon;
+    
+    // Performance optimization components
+    private FaviconCache faviconCache;
+    private JsonCache jsonCache;
 
     @Inject
     public UltraMOTD(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -73,7 +79,10 @@ public class UltraMOTD {
             this.config = loader.loadConfig(configFile);
             refreshFavicon(this.config.motd());
             
-            // Boot state machine for advanced features (rotation, reloads, metrics)
+            // Initialize performance optimization components
+            initializePerformanceComponents();
+            
+            // Boot state machine for advanced features (rotation, reloads)
             stateMachine = new UltraMOTDStateMachine(logger, configFile);
             stateMachine.start();
             
@@ -93,27 +102,46 @@ public class UltraMOTD {
         if (stateMachine != null && stateMachine.isRunning()) {
             stateMachine.stop();
         }
+        
+        // Cleanup performance components
+        if (faviconCache != null) {
+            faviconCache.clear();
+        }
+        if (jsonCache != null) {
+            jsonCache.clear();
+        }
+        
+        logger.info("UltraMOTD shutdown complete");
     }
 
     @Subscribe
     public void onProxyPing(ProxyPingEvent event) {
-        MOTDConfig activeMOTD = getActiveMOTDConfig();
-        Component description = activeMOTD != null
-                ? activeMOTD.description()
-                : Component.text(ConfigConstants.DEFAULT_MOTD_TEXT);
-        
-        // Calculate dynamic player count if enabled
-        int maxPlayers = calculateMaxPlayers(activeMOTD);
+        try {
+            MOTDConfig activeMOTD = getActiveMOTDConfig();
+            Component description = activeMOTD != null
+                    ? activeMOTD.description()
+                    : Component.text(ConfigConstants.DEFAULT_MOTD_TEXT);
+            
+            // Calculate dynamic player count if enabled
+            int maxPlayers = calculateMaxPlayers(activeMOTD);
 
-        var builder = event.getPing().asBuilder()
-                .description(description)
-                .maximumPlayers(maxPlayers);
+            var builder = event.getPing().asBuilder()
+                    .description(description)
+                    .maximumPlayers(maxPlayers);
 
-        if (favicon != null && activeMOTD != null && activeMOTD.enableFavicon()) {
-            builder.favicon(favicon);
+            // Use cached favicon if enabled
+            if (activeMOTD != null && activeMOTD.enableFavicon()) {
+                Favicon cachedFavicon = getCachedFavicon(activeMOTD);
+                if (cachedFavicon != null) {
+                    builder.favicon(cachedFavicon);
+                }
+            }
+
+            event.setPing(builder.build());
+            
+        } catch (Exception e) {
+            logger.error("Error in ping handler: {}", e.getMessage(), e);
         }
-
-        event.setPing(builder.build());
     }
 
     /**
@@ -135,18 +163,41 @@ public class UltraMOTD {
      * Default configuration content as YAML with improved readability
      */
     private static final String DEFAULT_YAML_CONFIG_CONTENT = """
-# UltraMOTD Configuration - YAML Format
-# High Performance MOTD Plugin for Velocity Proxy
+# UltraMOTD Configuration - Enhanced with multi-line MOTD and SEO features
+# Documentation: https://github.com/rafalohaki/ultramotd/wiki
 
-# Main MOTD settings
+# ========================================
+# SERVER INFORMATION & SEO SETTINGS
+# ========================================
+server:
+  name: "UltraMOTD Server"
+  description: "High-performance Minecraft server with advanced MOTD system"
+  website: "https://example.com"
+  discord: "https://discord.gg/example"
+  region: "EU"  # Options: EU, US, ASIA, OCE, etc.
+  tags:
+    - "minecraft"
+    - "survival"
+    - "pvp"
+    - "economy"
+  language: "en"
+
+# ========================================
+# MOTD DISPLAY SETTINGS
+# ========================================
 motd:
-  description: "<green>UltraMOTD <gray>- <blue>High Performance MOTD</blue></gray>"
+  # Multi-line MOTD support - use \\n for line breaks in MiniMessage format
+  description: |
+    <green>UltraMOTD <gray>- <blue>High Performance MOTD</blue></gray>
+    <gold>Welcome to our server! <gray>• <aqua>Custom plugins</gray> • <green>Active community</green>
   maxPlayers: 100
   enableFavicon: true
   faviconPath: "favicons/default.png"
   enableVirtualThreads: true
 
-# Player count manipulation
+# ========================================
+# PLAYER COUNT MANIPULATION
+# ========================================
 playerCount:
   enabled: false
   updateRate:
@@ -156,7 +207,25 @@ playerCount:
   maxCount: 1
   showRealPlayers: true
 
-# Performance optimization settings
+# ========================================
+# NETWORK & SECURITY SETTINGS
+# ========================================
+network:
+  # IP Management with deduplication
+  ipManagement:
+    enableWhitelist: false
+    whitelist: []
+    enableBlacklist: false
+    blacklist: []
+    enableDeduplication: true  # Prevent duplicate IP connections
+    logDuplicates: false
+  enableIPLogging: false
+  enableGeoBlocking: false
+  allowedCountries: []  # Empty = allow all countries
+
+# ========================================
+# PERFORMANCE OPTIMIZATION
+# ========================================
 performance:
   packetOptimization:
     preSerialization: true
@@ -175,7 +244,9 @@ performance:
     maxVarintBytes: 5
     cacheVarints: true
 
-# Caching strategies
+# ========================================
+# CACHING STRATEGIES
+# ========================================
 cache:
   favicon:
     enabled: true
@@ -189,18 +260,47 @@ cache:
     compressCache: false
   enableMetrics: true
 
-# Serialization format options
+# ========================================
+# SERIALIZATION FORMAT
+# ========================================
 serialization:
   descriptionFormat: "MINIMESSAGE"  # Options: MINIMESSAGE, LEGACY, JSON, AUTO
   enableFallback: true
   strictParsing: false
 
-# Java 21 specific features
+# ========================================
+# JAVA 21 SPECIFIC FEATURES
+# ========================================
 java21:
   enableVirtualThreads: true
   enablePreviewFeatures: false
   enableRecordPatterns: true
   enableStringTemplates: false
+
+# ========================================
+# EXAMPLES & NOTES
+# ========================================
+# Multi-line MOTD Examples:
+# 1. Using YAML literal block (|):
+#    description: |
+#      <green>Line 1
+#      <blue>Line 2
+#
+# 2. Using explicit line breaks:
+#    description: "<green>Line 1\\n<blue>Line 2"
+#
+# 3. Adventure Component format:
+#    description: '{"text":"Line 1\\nLine 2","color":"green"}'
+#
+# IP Management Examples:
+# whitelist:
+#   - "192.168.1.100"
+#   - "10.0.0.50"
+# blacklist:
+#   - "192.168.1.200"
+#
+# SEO Tags help your server appear in server lists
+# Region helps players find servers in their geographic area
 """;
 
     /**
@@ -287,6 +387,57 @@ java21:
      */
     public Logger getLogger() {
         return logger;
+    }
+
+    /**
+     * Initializes performance optimization components.
+     * Configures caching systems based on configuration.
+     */
+    private void initializePerformanceComponents() {
+        // Initialize favicon cache
+        var faviconConfig = config.cache().favicon();
+        if (faviconConfig.enabled()) {
+            this.faviconCache = new FaviconCache(
+                faviconConfig.maxCacheSize(),
+                faviconConfig.maxAgeMs()
+            );
+            logger.info("Favicon cache enabled: max {} entries, {}ms TTL", 
+                       faviconConfig.maxCacheSize(), faviconConfig.maxAgeMs());
+        }
+        
+        // Initialize JSON cache
+        var jsonConfig = config.cache().json();
+        if (jsonConfig.enabled()) {
+            this.jsonCache = new JsonCache(
+                jsonConfig.maxCacheSize(),
+                jsonConfig.maxAgeMs(),
+                jsonConfig.compressCache()
+            );
+            logger.info("JSON cache enabled: max {} entries, {}ms TTL, compress={}", 
+                       jsonConfig.maxCacheSize(), jsonConfig.maxAgeMs(), jsonConfig.compressCache());
+        }
+        
+        logger.info("Performance components initialized successfully");
+    }
+
+    /**
+     * Gets cached favicon using the high-performance cache system.
+     * Falls back to direct loading if cache is disabled or fails.
+     */
+    private Favicon getCachedFavicon(MOTDConfig motdConfig) {
+        if (faviconCache != null && motdConfig.faviconPath() != null) {
+            try {
+                FaviconCache.CachedFavicon cached = faviconCache.getFavicon(motdConfig.faviconPath(), dataDirectory);
+                if (cached != null) {
+                    return cached.favicon();
+                }
+            } catch (Exception e) {
+                logger.warn("Favicon cache error, falling back to direct load: {}", e.getMessage());
+            }
+        }
+        
+        // Fallback to existing favicon
+        return favicon;
     }
 
     /**

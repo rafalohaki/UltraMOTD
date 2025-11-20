@@ -10,7 +10,9 @@ public record UltraConfig(
     PerformanceConfig performance,
     CacheConfig cache,
     SerializationConfig serialization,
-    Java21Config java21
+    Java21Config java21,
+    ServerConfig server,
+    NetworkConfig network
 ) {
 
     /**
@@ -201,6 +203,158 @@ public record UltraConfig(
     }
 
     /**
+     * Server information and SEO settings
+     */
+    public record ServerConfig(
+        String name,
+        String description,
+        String website,
+        String discord,
+        String region,
+        String[] tags,
+        String language
+    ) {
+
+        public static ServerConfig getDefault() {
+            return new ServerConfig(
+                "UltraMOTD Server",
+                "High-performance Minecraft server with advanced MOTD system",
+                "https://example.com",
+                "https://discord.gg/example",
+                "EU",
+                new String[]{"minecraft", "survival", "pvp", "economy"},
+                "en"
+            );
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            ServerConfig that = (ServerConfig) obj;
+            return java.util.Objects.equals(name, that.name) &&
+                   java.util.Objects.equals(description, that.description) &&
+                   java.util.Objects.equals(website, that.website) &&
+                   java.util.Objects.equals(discord, that.discord) &&
+                   java.util.Objects.equals(region, that.region) &&
+                   java.util.Arrays.equals(tags, that.tags) &&
+                   java.util.Objects.equals(language, that.language);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = java.util.Objects.hash(name, description, website, discord, region, language);
+            result = 31 * result + java.util.Arrays.hashCode(tags);
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "ServerConfig{" +
+                   "name='" + name + '\'' +
+                   ", description='" + description + '\'' +
+                   ", website='" + website + '\'' +
+                   ", discord='" + discord + '\'' +
+                   ", region='" + region + '\'' +
+                   ", tags=" + java.util.Arrays.toString(tags) +
+                   ", language='" + language + '\'' +
+                   '}';
+        }
+    }
+
+    /**
+     * Network and security settings
+     */
+    public record NetworkConfig(
+        IPConfig ipManagement,
+        boolean enableIPLogging,
+        boolean enableGeoBlocking,
+        String[] allowedCountries
+    ) {
+
+        public record IPConfig(
+            boolean enableWhitelist,
+            String[] whitelist,
+            boolean enableBlacklist,
+            String[] blacklist,
+            boolean enableDeduplication,
+            boolean logDuplicates
+        ) {
+
+            @Override
+            public boolean equals(Object obj) {
+                if (this == obj) return true;
+                if (obj == null || getClass() != obj.getClass()) return false;
+                IPConfig that = (IPConfig) obj;
+                return enableWhitelist == that.enableWhitelist &&
+                       enableBlacklist == that.enableBlacklist &&
+                       enableDeduplication == that.enableDeduplication &&
+                       logDuplicates == that.logDuplicates &&
+                       java.util.Arrays.equals(whitelist, that.whitelist) &&
+                       java.util.Arrays.equals(blacklist, that.blacklist);
+            }
+
+            @Override
+            public int hashCode() {
+                int result = java.util.Objects.hash(enableWhitelist, enableBlacklist, enableDeduplication, logDuplicates);
+                result = 31 * result + java.util.Arrays.hashCode(whitelist);
+                result = 31 * result + java.util.Arrays.hashCode(blacklist);
+                return result;
+            }
+
+            @Override
+            public String toString() {
+                return "IPConfig{" +
+                       "enableWhitelist=" + enableWhitelist +
+                       ", whitelist=" + java.util.Arrays.toString(whitelist) +
+                       ", enableBlacklist=" + enableBlacklist +
+                       ", blacklist=" + java.util.Arrays.toString(blacklist) +
+                       ", enableDeduplication=" + enableDeduplication +
+                       ", logDuplicates=" + logDuplicates +
+                       '}';
+            }
+        }
+
+        public static NetworkConfig getDefault() {
+            return new NetworkConfig(
+                new IPConfig(false, new String[]{}, false, new String[]{}, true, false),
+                false,
+                false,
+                new String[]{}
+            );
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            NetworkConfig that = (NetworkConfig) obj;
+            return enableIPLogging == that.enableIPLogging &&
+                   enableGeoBlocking == that.enableGeoBlocking &&
+                   java.util.Objects.equals(ipManagement, that.ipManagement) &&
+                   java.util.Arrays.equals(allowedCountries, that.allowedCountries);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = java.util.Objects.hash(enableIPLogging, enableGeoBlocking);
+            result = 31 * result + java.util.Objects.hashCode(ipManagement);
+            result = 31 * result + java.util.Arrays.hashCode(allowedCountries);
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "NetworkConfig{" +
+                   "ipManagement=" + ipManagement +
+                   ", enableIPLogging=" + enableIPLogging +
+                   ", enableGeoBlocking=" + enableGeoBlocking +
+                   ", allowedCountries=" + java.util.Arrays.toString(allowedCountries) +
+                   '}';
+        }
+    }
+
+    /**
      * Creates a default comprehensive configuration
      */
     public static UltraConfig getDefault() {
@@ -210,7 +364,9 @@ public record UltraConfig(
             PerformanceConfig.getDefault(),
             CacheConfig.getDefault(),
             SerializationConfig.getDefault(),
-            Java21Config.getDefault()
+            Java21Config.getDefault(),
+            ServerConfig.getDefault(),
+            NetworkConfig.getDefault()
         );
     }
 

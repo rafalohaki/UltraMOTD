@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -102,6 +103,16 @@ public class ConfigWatcher {
         }
 
         executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            logger.warn("Interrupted while stopping ConfigWatcher executor");
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        
         logger.info("ConfigWatcher stopped");
     }
 

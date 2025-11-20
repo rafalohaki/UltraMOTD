@@ -162,14 +162,8 @@
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
-            <artifactId>netty-buffer</artifactId>
-            <version>4.1.113.Final</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-transport</artifactId>
-            <version>4.1.113.Final</version>
+            <artifactId>netty-all</artifactId>
+            <version>4.2.7.Final</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
