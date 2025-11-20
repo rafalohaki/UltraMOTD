@@ -342,20 +342,14 @@ public class UltraYamlConfigLoader {
         /**
      * Pre-processes custom tags before MiniMessage parsing.
      * Handles:
-     * - <center> tags for center alignment
-     * - Preserves all standard MiniMessage formatting
-     * 
-     * Supports all MiniMessage/Kyori Adventure features:
-     * - Colors: <color:#hex>, <red>, <blue>, etc.
-     * - Gradients: <gradient:#hex1:#hex2>text</gradient>
-     * - Text styling: <bold>, <italic>, <underlined>, <strikethrough>, <obfuscated>
-     * - Hover events: <hover:show_text:'text'>
-     * - Click events: <click:run_command:'/command'>
-     * - Keybinds: <key:key.jump>
-     * - Translatable: <lang:translation.key>
-     * - Selector: <selector:@a>
-     * - Score: <score:objective:selector>
-     * - NBT: <nbt:entity.UUID.path>
+     * - <center> tags for text centering (server list MOTD)
+     * - Leaves all other MiniMessage formatting as-is
+     *
+     * Uwaga praktyczna:
+     * - Plugin parsuje pełną składnię MiniMessage/Kyori (kolory, gradienty, hover, click, itp.),
+     *   ale **lista serwerów w kliencie Minecraft** realnie renderuje tylko kolor/styl tekstu.
+     * - Zaawansowane rzeczy jak <hover:...> czy <click:...> działają normalnie w czacie/GUI,
+     *   ale nie są widoczne w MOTD pingu – to ograniczenie klienta, nie pluginu.
      */
     private String processCustomTags(String text) {
         if (!text.contains(CENTER_TAG_OPEN)) {
@@ -367,15 +361,15 @@ public class UltraYamlConfigLoader {
         
         for (String line : lines) {
             if (line.contains(CENTER_TAG_OPEN) && line.contains(CENTER_TAG_CLOSE)) {
-                // Extract content between <center> and </center>
+                // Extract content between <center> and </center> and trim manual spaces
                 String content = line.substring(
                     line.indexOf(CENTER_TAG_OPEN) + CENTER_TAG_OPEN.length(),
                     line.lastIndexOf(CENTER_TAG_CLOSE)
-                );
+                ).strip();
                 
-                // Strip MiniMessage tags to count visible characters
-                String stripped = content.replaceAll("<[^>]+>", "");
-                int visibleLength = stripped.length();
+                // Strip MiniMessage tags to count visible characters (approximate width)
+                String stripped = content.replaceAll("<[^>]+>", "").strip();
+                int visibleLength = stripped.codePointCount(0, stripped.length());
                 int padding = Math.max(0, (MOTD_LINE_WIDTH - visibleLength) / 2);
                 
                 // Add spaces for centering

@@ -178,15 +178,13 @@ public class UltraMOTD {
 # ========================================
 motd:
   # Multi-line MOTD support - use \\n for line breaks in MiniMessage format
-  # Supports ALL Kyori Adventure MiniMessage features:
-  #   - Colors: <color:#hex>, <red>, <blue>, <green>, <yellow>, <gold>, etc.
-  #   - Gradients: <gradient:#hex1:#hex2>text</gradient>, <gradient:#hex1:#hex2:#hex3>
-  #   - Text styling: <bold>, <italic>, <underlined>, <strikethrough>, <obfuscated>
-  #   - Hover events: <hover:show_text:'Hover text here'>
-  #   - Click events: <click:run_command:'/command'>, <click:open_url:'https://...'>
-  #   - Keybinds: <key:key.jump>, <key:key.inventory>
-  #   - Unicode characters: ■, ⚡, ↔, •, ★, ✓, etc.
-  #   - Custom: <center> for center alignment (custom UltraMOTD tag)
+  # Parsed with Kyori Adventure MiniMessage.
+  # W praktyce w MOTD klient Minecraft wyświetla głównie:
+  #   - Kolory i gradienty: <color:#hex>, <red>, <green>, <gold>, <gradient:#hex1:#hex2>...
+  #   - Styl tekstu: <bold>, <italic>, <underlined>, <strikethrough>, <obfuscated>
+  #   - Unicode: ■, ⚡, ↔, •, ★, ✓, itp.
+  #   - Custom UltraMOTD: <center> – przybliżone centrowanie tekstu w linii
+  # Zaawansowane rzeczy typu <hover:...> / <click:...> są parsowane, ale nie mają efektu w liście serwerów.
   description: |
     <center><color:#FFD700>■ ■ ■</color> <gradient:#facc15:#f97316:#dc2626><bold>UltraMOTD</bold></gradient> <color:#FFD700>■ ■ ■</color></center>
     <center><gradient:#7FFF00:#32CD32>High Performance Velocity MOTD Plugin</gradient></center>
