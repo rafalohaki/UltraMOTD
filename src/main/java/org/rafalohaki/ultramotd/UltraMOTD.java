@@ -459,13 +459,9 @@ serialization:
                     var p = ch.pipeline();
                     try {
                         if (p.get(VELOCITY_HANDLER_NAME) != null) {
-                            p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-handshake",
-                                    new org.rafalohaki.ultramotd.netty.UltraHandshakeTracker(logger));
                             p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-ping",
                                     new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(packetPingCache, true));
                         } else {
-                            p.addFirst("ultramotd-handshake",
-                                    new org.rafalohaki.ultramotd.netty.UltraHandshakeTracker(logger));
                             p.addLast("ultramotd-ping",
                                     new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(packetPingCache, true));
                         }

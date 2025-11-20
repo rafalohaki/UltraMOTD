@@ -4,8 +4,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import org.slf4j.Logger;
 
-import java.lang.reflect.Method;
-
 import static org.rafalohaki.ultramotd.netty.ChannelKeys.PROTOCOL_VERSION;
 import static org.rafalohaki.ultramotd.netty.ChannelKeys.VIRTUAL_HOST;
 
@@ -21,22 +19,24 @@ public final class UltraHandshakeTracker extends ChannelInboundHandlerAdapter {
     private final Logger logger;
 
     private static final String HANDSHAKE_CLASS_NAME =
-            "com.velocitypowered.proxy.protocol.packet.Handshake";
+            "com.velocitypowered.proxy.protocol.packet.HandshakePacket";
 
     private static final Class<?> HANDSHAKE_CLASS;
-    private static final Method GET_PROTOCOL_VERSION;
-    private static final Method GET_SERVER_ADDRESS;
+    private static final java.lang.reflect.Method GET_PROTOCOL_VERSION;
+    private static final java.lang.reflect.Method GET_SERVER_ADDRESS;
 
     static {
         Class<?> clazz = null;
-        Method proto = null;
-        Method addr = null;
+        java.lang.reflect.Method proto = null;
+        java.lang.reflect.Method addr = null;
         try {
             clazz = Class.forName(HANDSHAKE_CLASS_NAME);
+            // ProtocolVersion getProtocolVersion()
             proto = clazz.getMethod("getProtocolVersion");
+            // String getServerAddress()
             addr = clazz.getMethod("getServerAddress");
-        } catch (Throwable t) {
-            // Will be logged by instance
+        } catch (Exception t) {
+            // zostaw pusty, logger robi to w konstruktorze
         }
         HANDSHAKE_CLASS = clazz;
         GET_PROTOCOL_VERSION = proto;
@@ -54,15 +54,23 @@ public final class UltraHandshakeTracker extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (HANDSHAKE_CLASS != null && HANDSHAKE_CLASS.isInstance(msg)) {
             try {
-                int protocol = (int) GET_PROTOCOL_VERSION.invoke(msg);
+                // ProtocolVersion z Velocity API
+                Object protoObj = GET_PROTOCOL_VERSION.invoke(msg);
                 String host = (String) GET_SERVER_ADDRESS.invoke(msg);
 
-                ctx.channel().attr(PROTOCOL_VERSION).set(protocol);
+                int protocolNumber = 0;
+                if (protoObj != null) {
+                    // com.velocitypowered.api.network.ProtocolVersion ma getProtocol()
+                    var method = protoObj.getClass().getMethod("getProtocol");
+                    protocolNumber = (int) method.invoke(protoObj);
+                }
+
+                ctx.channel().attr(PROTOCOL_VERSION).set(protocolNumber);
                 ctx.channel().attr(VIRTUAL_HOST).set(host);
 
-                logger.trace("Tracked handshake: protocol={}, host={}", protocol, host);
-            } catch (Throwable t) {
-                logger.debug("Failed to inspect handshake packet: {}", t.getMessage());
+                logger.trace("Tracked handshake: protocol={}, host={}", protocolNumber, host);
+            } catch (Exception t) {
+                logger.debug("Failed to inspect HandshakePacket", t);
             }
         }
 

@@ -5,9 +5,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import org.rafalohaki.ultramotd.cache.PacketPingCache;
 
-import static org.rafalohaki.ultramotd.netty.ChannelKeys.PROTOCOL_VERSION;
-import static org.rafalohaki.ultramotd.netty.ChannelKeys.VIRTUAL_HOST;
-
 public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
 
     private final PacketPingCache packetCache;
@@ -43,7 +40,7 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
-        PacketPingCache.Key key = extractKey(ctx);
+        PacketPingCache.Key key = extractKey();
         ByteBuf packet = packetCache.getPacket(key);
         if (packet == null) {
             packet = packetCache.getPacket(new PacketPingCache.Key(0, ""));
@@ -64,11 +61,8 @@ public class UltraPingNettyHandler extends ChannelInboundHandlerAdapter {
         return STATUS_REQUEST_CLASS != null && STATUS_REQUEST_CLASS.isInstance(msg);
     }
 
-    private PacketPingCache.Key extractKey(ChannelHandlerContext ctx) {
-        Integer proto = ctx.channel().attr(PROTOCOL_VERSION).get();
-        String host = ctx.channel().attr(VIRTUAL_HOST).get();
-        int p = proto != null ? proto : 0;
-        String h = host != null ? host : "";
-        return new PacketPingCache.Key(p, h);
+    private PacketPingCache.Key extractKey() {
+        // ignorujemy atrybuty kanału, zawsze jeden wariant pakietu
+        return new PacketPingCache.Key(0, "");
     }
 }
