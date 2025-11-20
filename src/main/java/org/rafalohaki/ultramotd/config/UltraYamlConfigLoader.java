@@ -360,24 +360,25 @@ public class UltraYamlConfigLoader {
         String[] lines = text.split("\n");
         
         for (String line : lines) {
+            final String content;
             if (line.contains(CENTER_TAG_OPEN) && line.contains(CENTER_TAG_CLOSE)) {
                 // Extract content between <center> and </center> and trim manual spaces
-                String content = line.substring(
+                content = line.substring(
                     line.indexOf(CENTER_TAG_OPEN) + CENTER_TAG_OPEN.length(),
                     line.lastIndexOf(CENTER_TAG_CLOSE)
                 ).strip();
-                
-                // Strip MiniMessage tags to count visible characters (approximate width)
-                String stripped = content.replaceAll("<[^>]+>", "").strip();
-                int visibleLength = stripped.codePointCount(0, stripped.length());
-                int padding = Math.max(0, (MOTD_LINE_WIDTH - visibleLength) / 2);
-                
-                // Add spaces for centering
-                result.append(" ".repeat(padding)).append(content);
             } else {
-                result.append(line);
+                // Line bez <center> też centrowana, ale bez ruszania tagów MiniMessage
+                content = line.strip();
             }
-            result.append("\n");
+            
+            // Strip MiniMessage tags to count visible characters (approximate width)
+            String stripped = content.replaceAll("<[^>]+>", "").strip();
+            int visibleLength = stripped.codePointCount(0, stripped.length());
+            int padding = Math.max(0, (MOTD_LINE_WIDTH - visibleLength) / 2);
+            
+            // Add spaces for centering
+            result.append(" ".repeat(padding)).append(content).append("\n");
         }
         
         // Remove trailing newline
