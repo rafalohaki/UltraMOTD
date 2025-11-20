@@ -11,7 +11,6 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.ServerPing;
 import com.velocitypowered.api.util.Favicon;
 import net.kyori.adventure.text.Component;
-import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import org.slf4j.Logger;
@@ -437,25 +436,26 @@ serialization:
                 return;
             }
 
-            // 3) Reszta jak u Ciebie – bierz serverBootstrap i wrapuj childHandler
-            var bootstrapField = connMgrClass.getDeclaredField("serverBootstrap");
-            if (!bootstrapField.trySetAccessible()) {
-                logger.warn("Cannot access serverBootstrap field, Netty injection disabled");
-                return;
-            }
-            ServerBootstrap bootstrap = (ServerBootstrap) bootstrapField.get(connectionManager);
+            // 3) Pobierz ServerChannelInitializerHolder przez publiczną metodę
+            var getServerChannelInitializer = connMgrClass.getMethod("getServerChannelInitializer");
+            Object holderObj = getServerChannelInitializer.invoke(connectionManager);
 
+            // 4) ServerChannelInitializerHolder
+            Class<?> holderClass = Class.forName("com.velocitypowered.proxy.network.ServerChannelInitializerHolder");
+
+            // Pobierz oryginalny initializer
+            var getMethod = holderClass.getMethod("get");
             @SuppressWarnings("unchecked")
-            ChannelInitializer<Channel> originalInit =
-                    (ChannelInitializer<Channel>) bootstrap.config().childHandler();
+            ChannelInitializer<Channel> originalInit = (ChannelInitializer<Channel>) getMethod.invoke(holderObj);
 
+            // 5) Stwórz wrapped initializer
             ChannelInitializer<Channel> wrapped = new ChannelInitializer<>() {
                 @Override
                 protected void initChannel(Channel ch) throws Exception {
-                    // 1) Dołóż oryginalny initializer do pipeline – Netty SAM wywoła jego initChannel
+                    // Dodaj oryginalny initializer jako handler do pipeline
                     ch.pipeline().addLast("ultramotd-original-init", originalInit);
 
-                    // 2) Teraz możesz modyfikować pipeline po oryginalnej inicjalizacji
+                    // Dodaj własne handlery
                     var p = ch.pipeline();
                     try {
                         if (p.get(VELOCITY_HANDLER_NAME) != null) {
@@ -475,8 +475,11 @@ serialization:
                 }
             };
 
-            bootstrap.childHandler(wrapped);
-            logger.info("Injected UltraMOTD Netty handlers into Velocity pipeline");
+            // 6) Podmień initializer przez holder.set()
+            var setMethod = holderClass.getMethod("set", ChannelInitializer.class);
+            setMethod.invoke(holderObj, wrapped);
+
+            logger.info("Injected UltraMOTD Netty handlers via ServerChannelInitializerHolder");
         } catch (Exception t) {
             logger.error("Failed to inject Netty handler, falling back to API mode", t);
         }
