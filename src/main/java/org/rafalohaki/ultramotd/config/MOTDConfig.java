@@ -1,4 +1,4 @@
-package org.rafalohaki.ultraMOTD.config;
+package org.rafalohaki.ultramotd.config;
 
 import net.kyori.adventure.text.Component;
 

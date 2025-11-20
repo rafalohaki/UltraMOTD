@@ -1,6 +1,6 @@
-package org.rafalohaki.ultraMOTD.deployment;
+package org.rafalohaki.ultramotd.deployment;
 
-import org.rafalohaki.ultraMOTD.metrics.UltraMOTDMetrics;
+import org.rafalohaki.ultramotd.metrics.UltraMOTDMetrics;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -162,7 +162,7 @@ public class ProductionMonitor {
                     java.nio.file.StandardOpenOption.APPEND);
 
         } catch (IOException e) {
-            logger.error("Failed to write metrics to file: {}", e.getMessage());
+            logger.error("Failed to write metrics to file {}: {}", metricsOutputPath, e.getMessage(), e);
         }
     }
 

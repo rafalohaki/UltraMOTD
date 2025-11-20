@@ -1,4 +1,4 @@
-package org.rafalohaki.ultraMOTD.config;
+package org.rafalohaki.ultramotd.config;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;

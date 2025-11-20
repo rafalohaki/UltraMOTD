@@ -1,4 +1,4 @@
-package org.rafalohaki.ultraMOTD.config;
+package org.rafalohaki.ultramotd.config;
 
 import org.slf4j.Logger;
 
@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -21,7 +22,7 @@ public class ConfigWatcher {
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final Consumer<Path> reloadCallback;
     private final Object threadLock = new Object();
-    private volatile Thread watchThread;
+    private final AtomicReference<Thread> watchThread = new AtomicReference<>();
 
     public ConfigWatcher(Logger logger, Consumer<Path> reloadCallback) throws IOException {
         this.logger = logger;
@@ -67,9 +68,10 @@ public class ConfigWatcher {
 
         isRunning.set(true);
         synchronized (threadLock) {
-            watchThread = new Thread(this::watchLoop, "ConfigWatcher-Thread");
-            watchThread.setDaemon(true);
-            watchThread.start();
+            Thread newThread = new Thread(this::watchLoop, "ConfigWatcher-Thread");
+            newThread.setDaemon(true);
+            watchThread.set(newThread);
+            newThread.start();
         }
 
         logger.info("ConfigWatcher started for directory: {}", configDir);
@@ -86,9 +88,10 @@ public class ConfigWatcher {
         isRunning.set(false);
 
         synchronized (threadLock) {
-            if (watchThread != null) {
-                watchThread.interrupt();
-            }
+        Thread currentThread = watchThread.getAndSet(null);
+        if (currentThread != null) {
+            currentThread.interrupt();
+        }
         }
 
         try {

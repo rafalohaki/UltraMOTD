@@ -1,13 +1,14 @@
-package org.rafalohaki.ultraMOTD.rotation;
+package org.rafalohaki.ultramotd.rotation;
 
 import net.kyori.adventure.text.Component;
-import org.rafalohaki.ultraMOTD.metrics.UltraMOTDMetrics;
+import org.rafalohaki.ultramotd.metrics.UltraMOTDMetrics;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -27,7 +28,7 @@ public class MOTDRotator {
     private final Duration rotationInterval;
     private final int requestsPerRotation;
     private volatile Instant lastRotation = Instant.now();
-    private volatile Component currentMOTD;
+    private final AtomicReference<Component> currentMOTD;
 
     public MOTDRotator(List<Component> motdMessages, RotationStrategy strategy,
                        Duration rotationInterval, int requestsPerRotation, UltraMOTDMetrics metrics) {
@@ -36,9 +37,9 @@ public class MOTDRotator {
         this.rotationInterval = rotationInterval;
         this.requestsPerRotation = requestsPerRotation;
         this.metrics = metrics;
-        this.currentMOTD = motdMessages.isEmpty() ?
+        this.currentMOTD = new AtomicReference<>(motdMessages.isEmpty() ?
                 Component.text("§aUltraMOTD §7- §bHigh Performance MOTD") :
-                motdMessages.get(0);
+                motdMessages.get(0));
     }
 
     /**
@@ -60,7 +61,7 @@ public class MOTDRotator {
                     lock.writeLock().unlock();
                 }
             }
-            return currentMOTD;
+            return currentMOTD.get();
         } finally {
             lock.readLock().unlock();
         }
@@ -87,7 +88,7 @@ public class MOTDRotator {
         lock.writeLock().lock();
         try {
             if (!newMessages.isEmpty()) {
-                this.currentMOTD = newMessages.get(0);
+                this.currentMOTD.set(newMessages.get(0));
                 this.currentIndex.set(0);
             }
         } finally {
@@ -137,7 +138,7 @@ public class MOTDRotator {
         };
 
         currentIndex.set(nextIndex);
-        currentMOTD = motdMessages.get(nextIndex);
+        currentMOTD.set(motdMessages.get(nextIndex));
         lastRotation = Instant.now();
     }
 

@@ -1,4 +1,4 @@
-package org.rafalohaki.ultraMOTD.metrics;
+package org.rafalohaki.ultramotd.metrics;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;

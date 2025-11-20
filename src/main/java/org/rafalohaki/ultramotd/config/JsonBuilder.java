@@ -1,4 +1,4 @@
-package org.rafalohaki.ultraMOTD.config;
+package org.rafalohaki.ultramotd.config;
 
 /**
  * JSON builder using Java 21 string templates for optimized JSON generation.

@@ -1,6 +1,6 @@
-package org.rafalohaki.ultraMOTD.deployment;
+package org.rafalohaki.ultramotd.deployment;
 
-import org.rafalohaki.ultraMOTD.rotation.MOTDRotator;
+import org.rafalohaki.ultramotd.rotation.MOTDRotator;
 
 import java.time.Duration;
 import java.util.List;

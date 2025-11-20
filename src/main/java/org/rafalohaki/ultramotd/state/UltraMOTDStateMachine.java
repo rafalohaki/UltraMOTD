@@ -1,11 +1,11 @@
-package org.rafalohaki.ultraMOTD.state;
+package org.rafalohaki.ultramotd.state;
 
 import net.kyori.adventure.text.Component;
-import org.rafalohaki.ultraMOTD.config.ConfigLoader;
-import org.rafalohaki.ultraMOTD.config.ConfigWatcher;
-import org.rafalohaki.ultraMOTD.config.MOTDConfig;
-import org.rafalohaki.ultraMOTD.metrics.UltraMOTDMetrics;
-import org.rafalohaki.ultraMOTD.rotation.MOTDRotator;
+import org.rafalohaki.ultramotd.config.ConfigLoader;
+import org.rafalohaki.ultramotd.config.ConfigWatcher;
+import org.rafalohaki.ultramotd.config.MOTDConfig;
+import org.rafalohaki.ultramotd.metrics.UltraMOTDMetrics;
+import org.rafalohaki.ultramotd.rotation.MOTDRotator;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Main state machine for UltraMOTD that orchestrates MOTD rotation,
@@ -29,8 +30,8 @@ public class UltraMOTDStateMachine {
     private final ScheduledExecutorService scheduler;
 
     // Current state
-    private volatile MOTDConfig currentConfig;
-    private volatile MOTDRotator rotator;
+    private final AtomicReference<MOTDConfig> currentConfig;
+    private final AtomicReference<MOTDRotator> rotator;
     private volatile boolean isRunning = false;
 
     public UltraMOTDStateMachine(Logger logger, Path configPath) {
@@ -39,6 +40,8 @@ public class UltraMOTDStateMachine {
         this.metrics = new UltraMOTDMetrics();
         this.configLoader = new ConfigLoader(logger);
         this.configWatcher = ConfigWatcher.createUltraMOTDWatcher(logger, this::handleConfigReload);
+        this.currentConfig = new AtomicReference<>();
+        this.rotator = new AtomicReference<>();
         this.scheduler = Executors.newScheduledThreadPool(2, r -> {
             Thread t = new Thread(r, "UltraMOTD-StateMachine");
             t.setDaemon(true);
@@ -57,8 +60,9 @@ public class UltraMOTDStateMachine {
 
         try {
             // Load initial configuration
-            currentConfig = configLoader.loadConfig(configPath);
-            logger.info("Initial configuration loaded: {}", currentConfig);
+            MOTDConfig initialConfig = configLoader.loadConfig(configPath);
+            currentConfig.set(initialConfig);
+            logger.info("Initial configuration loaded: {}", initialConfig);
 
             // Initialize MOTD rotator
             initializeRotator();
@@ -109,13 +113,13 @@ public class UltraMOTDStateMachine {
      * Gets the current MOTD for the specified protocol version.
      */
     public Component getCurrentMOTD() {
-        if (!isRunning || rotator == null) {
+        if (!isRunning || rotator.get() == null) {
             return Component.text("§aUltraMOTD §7- §bHigh Performance MOTD");
         }
 
         long startTime = System.nanoTime();
         try {
-            Component motd = rotator.getCurrentMOTD();
+            Component motd = rotator.get().getCurrentMOTD();
             metrics.recordResponseTime(System.nanoTime() - startTime);
             return motd;
         } catch (Exception e) {
@@ -129,7 +133,7 @@ public class UltraMOTDStateMachine {
      * Gets the current configuration.
      */
     public MOTDConfig getCurrentConfig() {
-        return currentConfig;
+        return currentConfig.get();
     }
 
     /**
@@ -143,8 +147,9 @@ public class UltraMOTDStateMachine {
      * Forces an immediate MOTD rotation.
      */
     public void forceRotation() {
-        if (rotator != null) {
-            rotator.forceRotation();
+        MOTDRotator currentRotator = rotator.get();
+        if (currentRotator != null) {
+            currentRotator.forceRotation();
             logger.info("Forced MOTD rotation");
         }
     }
@@ -153,14 +158,16 @@ public class UltraMOTDStateMachine {
      * Gets the current MOTD rotation index.
      */
     public int getCurrentRotationIndex() {
-        return rotator != null ? rotator.getCurrentIndex() : 0;
+        MOTDRotator currentRotator = rotator.get();
+        return currentRotator != null ? currentRotator.getCurrentIndex() : 0;
     }
 
     /**
      * Gets the number of configured MOTD messages.
      */
     public int getMOTDCount() {
-        return rotator != null ? rotator.getMOTDCount() : 1;
+        MOTDRotator currentRotator = rotator.get();
+        return currentRotator != null ? currentRotator.getMOTDCount() : 1;
     }
 
     /**
@@ -171,20 +178,22 @@ public class UltraMOTDStateMachine {
     }
 
     private void initializeRotator() {
+        MOTDConfig config = currentConfig.get();
         List<Component> motdMessages = List.of(
-                currentConfig.description(),
+                config.description(),
                 Component.text("§6Welcome to UltraMOTD! §7- §bHigh Performance Server"),
                 Component.text("§eJoin our community! §7- §bdiscord.gg/example"),
                 Component.text("§cCustom MOTD §7- §bPowered by UltraMOTD")
         );
 
-        rotator = new MOTDRotator(
+        MOTDRotator newRotator = new MOTDRotator(
                 motdMessages,
                 MOTDRotator.RotationStrategy.TIME_BASED,
                 Duration.ofMinutes(5), // Rotate every 5 minutes
                 100, // Or every 100 requests
                 metrics
         );
+        rotator.set(newRotator);
 
         logger.info("MOTD rotator initialized with {} messages", motdMessages.size());
     }
@@ -202,10 +211,10 @@ public class UltraMOTDStateMachine {
 
         try {
             MOTDConfig newConfig = configLoader.loadConfig(configPath);
+            MOTDConfig oldConfig = currentConfig.get();
 
-            if (!newConfig.equals(currentConfig)) {
-                MOTDConfig oldConfig = currentConfig;
-                currentConfig = newConfig;
+            if (!newConfig.equals(oldConfig)) {
+                currentConfig.set(newConfig);
 
                 // Reinitialize rotator if description changed
                 if (!oldConfig.description().equals(newConfig.description())) {
@@ -236,7 +245,7 @@ public class UltraMOTDStateMachine {
                 logger.warn("Config watcher is not running");
             }
 
-            if (rotator == null) {
+            if (rotator.get() == null) {
                 logger.warn("MOTD rotator is null");
             }
 
