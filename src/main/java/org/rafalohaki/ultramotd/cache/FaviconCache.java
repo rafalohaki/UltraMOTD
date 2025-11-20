@@ -99,8 +99,8 @@ public class FaviconCache {
             CacheEntry newEntry = new CacheEntry(favicon, directBuffer, Instant.now().plusMillis(maxAgeMs));
             cache.put(faviconPath, newEntry);
             
-            logger.info("Cached favicon: {} ({} bytes, expires in {}ms)", 
-                       faviconPath, fileSize, maxAgeMs);
+            logger.debug("Cached favicon: {} ({} bytes, expires in {}ms)", 
+                         faviconPath, fileSize, maxAgeMs);
             
             return new CachedFavicon(favicon, directBuffer.duplicate());
             
