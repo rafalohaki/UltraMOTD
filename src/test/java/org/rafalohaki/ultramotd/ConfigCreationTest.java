@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.rafalohaki.ultramotd.config.ConfigConstants;
 
 /**
  * Test to verify config creation functionality
@@ -19,13 +20,13 @@ class ConfigCreationTest {
         Files.createDirectories(dataDirectory);
         
         // Test config creation logic
-        Path configFile = dataDirectory.resolve("config.json");
+        Path configFile = dataDirectory.resolve(ConfigConstants.CONFIG_FILENAME);
         
         // Verify config doesn't exist initially
         assertFalse(Files.exists(configFile), "Config file should not exist initially");
         
-        // Create default config (simulating UltraMOTD.createDefaultConfig)
-        String defaultConfig = getDefaultConfigContent();
+        // Create default config (simulating UltraMOTD.createDefaultYamlConfig)
+        String defaultConfig = getDefaultYamlConfigContent();
         Files.writeString(configFile, defaultConfig);
         
         // Verify config was created
@@ -34,18 +35,17 @@ class ConfigCreationTest {
         // Verify config content
         String content = Files.readString(configFile);
         assertTrue(content.contains("UltraMOTD"), "Config should contain plugin name");
-        assertTrue(content.contains("maxPlayers"), "Config should contain maxPlayers setting");
+        assertTrue(content.contains("maxPlayers:"), "Config should contain maxPlayers setting");
     }
 
-    private String getDefaultConfigContent() {
+    private String getDefaultYamlConfigContent() {
         return """
-            {
-              "description": "<green>UltraMOTD <gray>- <blue>High Performance MOTD</blue></gray>",
-              "maxPlayers": 100,
-              "enableFavicon": true,
-              "faviconPath": "favicons/default.png",
-              "enableVirtualThreads": true
-            }
-            """;
+motd:
+  description: "<green>UltraMOTD</green>"
+  maxPlayers: 100
+  enableFavicon: true
+  faviconPath: "favicons/default.png"
+  enableVirtualThreads: true
+        """;
     }
 }

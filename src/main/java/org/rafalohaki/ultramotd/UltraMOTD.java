@@ -11,6 +11,9 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.ServerPing;
 import com.velocitypowered.api.util.Favicon;
 import net.kyori.adventure.text.Component;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
 import org.slf4j.Logger;
 import org.rafalohaki.ultramotd.config.MOTDConfig;
 import org.rafalohaki.ultramotd.config.UltraConfig;
@@ -20,10 +23,12 @@ import org.rafalohaki.ultramotd.state.UltraMOTDStateMachine;
 import org.rafalohaki.ultramotd.cache.FaviconCache;
 import org.rafalohaki.ultramotd.cache.JsonCache;
 import org.rafalohaki.ultramotd.cache.ServerPingCache;
+import org.rafalohaki.ultramotd.cache.PacketPingCache;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * UltraMOTD - High Performance MOTD Plugin for Velocity
@@ -68,6 +73,13 @@ public class UltraMOTD {
     private FaviconCache faviconCache;
     private JsonCache jsonCache;
     private ServerPingCache serverPingCache;
+    private PacketPingCache packetPingCache;  // Experimental: packet-level cache
+
+    // Constants for Netty pipeline manipulation
+    private static final String VELOCITY_HANDLER_NAME = "handler";
+
+    private final AtomicReference<ServerPing.Version> lastVersionInfo = new AtomicReference<>();
+    private final AtomicReference<ServerPing.Players> lastPlayersInfo = new AtomicReference<>();
 
     @Inject
     public UltraMOTD(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -103,8 +115,22 @@ public class UltraMOTD {
             this.serverPingCache = new ServerPingCache(logger);
             logger.info("ServerPing cache initialized");
             
+            // Initialize PacketPingCache (experimental)
+            this.packetPingCache = new PacketPingCache(logger);
+            logger.info("PacketPing cache initialized (experimental)");
+            
+            // Try Netty pipeline injection if enabled
+            if (config.performance().netty().pipelineInjection()) {
+                tryNettyPipelineInjection();
+            }
+            
             // Boot state machine for advanced features (rotation, reloads)
-            stateMachine = new UltraMOTDStateMachine(logger, configFile);
+            stateMachine = new UltraMOTDStateMachine(logger, configFile, motd -> {
+                // On config reload, clear packet cache so it gets rebuilt on next ping
+                if (packetPingCache != null) {
+                    packetPingCache.clear();
+                }
+            });
             stateMachine.start();
             
             logger.info("UltraMOTD initialized successfully!");
@@ -136,11 +162,25 @@ public class UltraMOTD {
             serverPingCache.invalidate();
         }
         
+        if (packetPingCache != null) {
+            packetPingCache.clear();
+        }
+        
         logger.info("UltraMOTD shutdown complete");
     }
 
     @Subscribe
     public void onProxyPing(ProxyPingEvent event) {
+        // Defensive check in case initialization failed
+        if (config == null) {
+            logger.warn("Config not loaded, using default fallback");
+            event.setPing(ServerPing.builder()
+                    .description(Component.text("§aUltraMOTD §7- §bPlugin Loading..."))
+                    .maximumPlayers(100)
+                    .build());
+            return;
+        }
+
         try {
             MOTDConfig activeMOTD = getActiveMOTDConfig();
             Component description = activeMOTD != null
@@ -164,9 +204,14 @@ public class UltraMOTD {
                 event.getPing().getVersion(),
                 event.getPing().getPlayers().orElse(null)
             );
-            
+        
             event.setPing(cachedPing);
-            
+            lastVersionInfo.set(event.getPing().getVersion());
+            lastPlayersInfo.set(event.getPing().getPlayers().orElse(null));
+            if (packetPingCache != null && packetPingCache.size() == 0) {
+                rebuildPacketCacheForCurrentMotd(event.getPing().getVersion(), event.getPing().getPlayers().orElse(null));
+            }
+        
         } catch (Exception e) {
             logger.error("Error in ping handler: {}", e.getMessage(), e);
         }
@@ -344,12 +389,130 @@ serialization:
     }
 
     /**
-     * Initializes performance optimization components.
-     * Configures caching systems based on configuration.
+     * Attempts to inject Netty handler for packet-level caching (EXPERIMENTAL).
+     * This is a highly experimental feature that requires reflection into Velocity internals.
      * 
-     * Note: Due to Velocity's API limitations, only favicon caching and Java 21 features
-     * can be fully utilized. JSON caching and Netty optimizations are configured
-     * but not applicable to ProxyPingEvent responses.
+     * Architecture:
+     * - Installs UltraPingNettyHandler before Velocity's standard ping handler
+     * - Handler serves pre-built packets from PacketPingCache
+     * - Falls back to standard Velocity flow if injection fails or packet not cached
+     * 
+     * Safety:
+     * - Fails gracefully if reflection/injection fails
+     * - Always has fallback to API mode (ServerPingCache + ProxyPingEvent)
+     * - Logs clear warning that this is experimental and unsupported
+     * 
+     * Risks:
+     * - May break on Velocity version updates
+     * - May conflict with other Netty-manipulating plugins
+     * - Not officially supported by Velocity API
+     */
+    private void tryNettyPipelineInjection() {
+        try {
+            // 1) Ustal realną klasę impl ProxyServer
+            Class<?> velocityServerClass = server.getClass();
+
+            // 2) Znajdź pole typu ConnectionManager niezależnie od nazwy
+            Class<?> connMgrClass = Class.forName("com.velocitypowered.proxy.network.ConnectionManager");
+
+            java.lang.reflect.Field connectionField = java.util.Arrays.stream(velocityServerClass.getDeclaredFields())
+                    .filter(f -> f.getType().equals(connMgrClass))
+                    .findFirst()
+                    .orElse(null);
+
+            if (connectionField == null) {
+                logger.warn("No ConnectionManager field found on {}, Netty injection disabled",
+                        velocityServerClass.getName());
+                return;
+            }
+
+            if (!connectionField.trySetAccessible()) {
+                logger.warn("Cannot access ConnectionManager field, Netty injection disabled");
+                return;
+            }
+            Object connectionManager = connectionField.get(server);
+
+            if (!connMgrClass.isInstance(connectionManager)) {
+                logger.warn("ConnectionManager field type mismatch: {}", connectionManager);
+                return;
+            }
+
+            // 3) Reszta jak u Ciebie – bierz serverBootstrap i wrapuj childHandler
+            var bootstrapField = connMgrClass.getDeclaredField("serverBootstrap");
+            if (!bootstrapField.trySetAccessible()) {
+                logger.warn("Cannot access serverBootstrap field, Netty injection disabled");
+                return;
+            }
+            ServerBootstrap bootstrap = (ServerBootstrap) bootstrapField.get(connectionManager);
+
+            @SuppressWarnings("unchecked")
+            ChannelInitializer<Channel> originalInit =
+                    (ChannelInitializer<Channel>) bootstrap.config().childHandler();
+
+            ChannelInitializer<Channel> wrapped = new ChannelInitializer<>() {
+                @Override
+                protected void initChannel(Channel ch) throws Exception {
+                    // 1) Dołóż oryginalny initializer do pipeline – Netty SAM wywoła jego initChannel
+                    ch.pipeline().addLast("ultramotd-original-init", originalInit);
+
+                    // 2) Teraz możesz modyfikować pipeline po oryginalnej inicjalizacji
+                    var p = ch.pipeline();
+                    try {
+                        if (p.get(VELOCITY_HANDLER_NAME) != null) {
+                            p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-handshake",
+                                    new org.rafalohaki.ultramotd.netty.UltraHandshakeTracker(logger));
+                            p.addBefore(VELOCITY_HANDLER_NAME, "ultramotd-ping",
+                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(packetPingCache, true));
+                        } else {
+                            p.addFirst("ultramotd-handshake",
+                                    new org.rafalohaki.ultramotd.netty.UltraHandshakeTracker(logger));
+                            p.addLast("ultramotd-ping",
+                                    new org.rafalohaki.ultramotd.netty.UltraPingNettyHandler(packetPingCache, true));
+                        }
+                    } catch (Exception t) {
+                        logger.debug("Pipeline modification failed: {}", t.getMessage());
+                    }
+                }
+            };
+
+            bootstrap.childHandler(wrapped);
+            logger.info("Injected UltraMOTD Netty handlers into Velocity pipeline");
+        } catch (Exception t) {
+            logger.error("Failed to inject Netty handler, falling back to API mode", t);
+        }
+    }
+
+    private void rebuildPacketCacheForCurrentMotd(ServerPing.Version version, ServerPing.Players players) {
+        if (packetPingCache == null || serverPingCache == null) {
+            return;
+        }
+        MOTDConfig motd = getActiveMOTDConfig();
+        if (motd == null) {
+            return;
+        }
+        Favicon faviconToUse = motd.enableFavicon() ? getCachedFavicon(motd) : null;
+        ServerPing ping = serverPingCache.getOrCreatePing(
+                motd.description(),
+                calculateMaxPlayers(motd),
+                faviconToUse,
+                version,
+                players
+        );
+        packetPingCache.updatePacket(new PacketPingCache.Key(0, ""), ping);
+    }
+
+    /**
+     * Initializes all caching and performance optimization components.
+     * Designed to be fail-safe: if initialization fails for one component, others still work.
+     * 
+     * Components:
+     * - Favicon cache (TTL + size limits)
+     * - JSON response cache (configured but not applicable to ProxyPingEvent)
+     * - ServerPing cache (zero-allocation ping responses)
+     * - PacketPing cache (experimental packet-level caching)
+     * 
+     * Note: PacketPingCache requires Netty pipeline injection to be effective.
+     * Without injection, it's just initialized but not used in hot-path.
      */
     private void initializePerformanceComponents() {
         // Initialize favicon cache
@@ -363,17 +526,7 @@ serialization:
                        faviconConfig.maxCacheSize(), faviconConfig.maxAgeMs());
         }
         
-        // Initialize JSON cache
-        var jsonConfig = config.cache().json();
-        if (jsonConfig.enabled()) {
-            this.jsonCache = new JsonCache(
-                jsonConfig.maxCacheSize(),
-                jsonConfig.maxAgeMs(),
-                jsonConfig.compressCache()
-            );
-            logger.info("JSON cache enabled: max {} entries, {}ms TTL, compress={}", 
-                       jsonConfig.maxCacheSize(), jsonConfig.maxAgeMs(), jsonConfig.compressCache());
-        }
+        // Initialize JSON cache (currently unused in hot-path, reserved for future features)
         
         logger.info("Performance components initialized successfully");
     }

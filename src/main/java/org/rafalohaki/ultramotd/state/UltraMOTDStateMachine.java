@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Simplified state machine for UltraMOTD that handles configuration hot-reload.
@@ -29,7 +30,13 @@ public class UltraMOTDStateMachine {
     private final AtomicReference<MOTDConfig> currentConfig;
     private volatile boolean isRunning = false;
 
+    private final Consumer<MOTDConfig> reloadListener;
+
     public UltraMOTDStateMachine(Logger logger, Path configPath) {
+        this(logger, configPath, null);
+    }
+
+    public UltraMOTDStateMachine(Logger logger, Path configPath, Consumer<MOTDConfig> reloadListener) {
         this.logger = logger;
         this.configPath = configPath;
         this.configLoader = new UltraYamlConfigLoader(logger);
@@ -40,6 +47,7 @@ public class UltraMOTDStateMachine {
             t.setDaemon(true);
             return t;
         });
+        this.reloadListener = reloadListener;
     }
 
     /**
@@ -159,6 +167,7 @@ public class UltraMOTDStateMachine {
             if (motdConfig != null) {
                 currentConfig.set(motdConfig);
                 logger.info("Loaded MOTD configuration: {} max players", motdConfig.maxPlayers());
+                notifyReloadListener(motdConfig);
             } else {
                 logger.warn("MOTD configuration is null, using defaults");
                 currentConfig.set(MOTDConfig.getDefault());
@@ -168,6 +177,17 @@ public class UltraMOTDStateMachine {
             logger.error("Failed to load configuration: {}", e.getMessage(), e);
             // Set default configuration on error
             currentConfig.set(MOTDConfig.getDefault());
+        }
+    }
+
+    private void notifyReloadListener(MOTDConfig motdConfig) {
+        if (reloadListener == null) {
+            return;
+        }
+        try {
+            reloadListener.accept(motdConfig);
+        } catch (Exception e) {
+            logger.debug("Reload listener failed: {}", e.getMessage());
         }
     }
 

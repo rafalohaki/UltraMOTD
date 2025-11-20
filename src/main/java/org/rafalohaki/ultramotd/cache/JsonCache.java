@@ -53,7 +53,7 @@ public class JsonCache {
         if (entry != null && !entry.isExpired()) {
             cacheHits.incrementAndGet();
             logger.debug("JSON cache hit for key: {}", cacheKey);
-            return new CachedJsonResponse(entry.buffer().duplicate());
+            return new CachedJsonResponse(entry.buffer().retainedSlice());
         }
 
         // Cache miss - create new JSON response
@@ -114,7 +114,7 @@ public class JsonCache {
             
             logger.debug("Cached JSON response: {} bytes, expires in {}ms", responseBytes.length, maxAgeMs);
             
-            return new CachedJsonResponse(directBuffer.duplicate());
+            return new CachedJsonResponse(directBuffer.retainedSlice());
             
         } catch (Exception e) {
             logger.error("Failed to create JSON response for cache: {}", e.getMessage(), e);
@@ -212,7 +212,7 @@ public class JsonCache {
             Instant createdAt
     ) {
         public CacheEntry(ByteBuf buffer, Instant expiresAt) {
-            this(buffer.retain(), expiresAt, Instant.now());
+            this(buffer, expiresAt, Instant.now());
         }
 
         public boolean isExpired() {

@@ -51,7 +51,7 @@ public class FaviconCache {
         if (entry != null && !entry.isExpired()) {
             cacheHits.incrementAndGet();
             logger.debug("Favicon cache hit: {}", faviconPath);
-            return new CachedFavicon(entry.favicon(), entry.buffer().duplicate());
+            return new CachedFavicon(entry.favicon(), entry.buffer().retainedSlice());
         }
 
         // Cache miss - load from disk
@@ -102,7 +102,7 @@ public class FaviconCache {
             logger.debug("Cached favicon: {} ({} bytes, expires in {}ms)", 
                          faviconPath, fileSize, maxAgeMs);
             
-            return new CachedFavicon(favicon, directBuffer.duplicate());
+            return new CachedFavicon(favicon, directBuffer.retainedSlice());
             
         } catch (IOException e) {
             logger.error("Failed to load favicon: {} - {}", fullPath, e.getMessage(), e);
@@ -194,7 +194,7 @@ public class FaviconCache {
             Instant createdAt
     ) {
         public CacheEntry(Favicon favicon, ByteBuf buffer, Instant expiresAt) {
-            this(favicon, buffer.retain(), expiresAt, Instant.now());
+            this(favicon, buffer, expiresAt, Instant.now());
         }
 
         public boolean isExpired() {

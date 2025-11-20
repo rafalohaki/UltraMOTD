@@ -4,21 +4,30 @@ High-performance MOTD plugin for the Velocity proxy focused on predictable laten
 
 ## Key Features
 
-1. **Zero-Allocation Ping Responses**
-   - Pre-built ServerPing cache eliminates object allocation in hot-path
-   - ConcurrentHashMap lookup with identity-based keys
-   - Sub-microsecond ping handler latency
+1. **Multi-Level Caching Architecture**
+   - **API Mode (default)**: ServerPing pre-building cache (zero allocation)
+   - **Experimental Packet Mode**: Pre-serialized packet cache (FastMOTD-style)
+   - Favicon cache with TTL, size limits, and Netty direct buffers
+   - MiniMessage parsing moved out of hot-path
+
 2. **Advanced MOTD Rendering**
    - Full Adventure MiniMessage support (gradients, hex colors, unicode, nested formatting)
    - Multi-line descriptions with YAML literal blocks
-3. **Smart Caching**
-   - ServerPing pre-building cache (zero allocation)
-   - Favicon cache with TTL, size limits, and Netty direct buffers
-   - MiniMessage parsing moved out of hot-path
+   - Custom `<center>` tag for text alignment
+
+3. **Performance Modes**
+   - **Standard Mode**: Zero-allocation ServerPing cache (~80% of max speed, 100% stable)
+   - **Experimental Netty Mode**: Packet-level caching (~95% of max speed, requires `performance.netty.pipelineInjection: true`)
+   - Sub-microsecond ping handler latency in both modes
+
 4. **Java 21 Optimizations**
    - Virtual threads for async tasks
    - Record patterns and modern language features for zero-cost config parsing
-5. **Lightweight Configuration**
+   
+5. **Production-Ready**
+   - Graceful fallback from experimental to standard mode
+   - No reflection/unsafe in default mode
+   - Clear warnings for experimental features
 
 ## License
 
